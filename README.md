@@ -20,6 +20,7 @@ Additional information about how the mod works, features, and limitations can be
 - [ ] Initial release
 - [ ] Ghosts placed by hand or by blueprint are blocked from being built until approved (other ghosts e.g. from destroyed entities are still built as usual)
 - [ ] Construction Planner tool for approving ghosts to be built (shift-select to un-approve)
+- [ ] Support both entity ghosts and tile ghosts
 
 ### 1.1
 - [ ] Filtered Construction Planners?
