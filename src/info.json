@@ -5,7 +5,7 @@
     "author": "ceresward",
     "contact": "https://reddit.com/u/ceresward",
     "homepage": "https://github.com/ceresward/factorio-constructionplanner",
-    "factorio_version": "0.18",
-    "dependencies": ["base >= 0.18"],
+    "factorio_version": "1.1",
+    "dependencies": ["base >= 1.1"],
     "description": "Changes how ghost entities are built to give more control over planning and building with construction bots.  Construction bots will not be automatically dispatched to build ghosts; they only dispatch after the player uses the Construction Planner tool to approve construction."
 }
