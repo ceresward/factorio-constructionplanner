@@ -1,3 +1,34 @@
+-- Note:  latest plan:
+-- 1. Use a friendly force to hold the unapproved entities, as I'm currently doing
+--    -  Advantage of this strategy is that it *should* preserve entity config and connections (inventories, filters, wire connections, etc.)
+--    -  Preserving config and connections is possible in theory with generated placeholders, but would necessarily be very complex and brittle due to API constraints
+--    -  TODO: will undo/redo still work as expected?  (i.e. will both the placeholder entities and unapproved entities be cleared when undoing a stamp?)
+--       -  Betting it won't work out-of-the-box, but I expect there should be an event I can listen to so I can fix up things
+-- 2. Create 'placeholder' entities - invisible entities that are positioned over the unapproved ghosts and can be selected by selection-tools
+--    -  TODO: what to do about placeholder entity right-click?  (i.e. 'mining')?  Since the friendly force is also mineable...
+--       -  It might be possible to make the placeholders non-mineable.  Ideally, they should only be interactable via the selection-tools
+--    -  Placeholders should be destroyed whenever the unapproved entity is destroyed, and vice-versa
+--       -  Events on_pre_ghost_deconstructed + on_player_mined_entity combined should cover the normal circumstancs...are there others though?
+-- 3. Blueprint/copy:  do JIT replacement of the placeholder entities in the BP w/ the entities from the unapproved force
+--    -  Idea is to generate a BP of the same area from the unapproved force, then swap those entities in for the placeholders in the original BP
+--    -  Swap: should be okay to simply remove all placeholder entities from the original BP, then add in all entities from the generated BP
+-- 4. Deconstruction:  two potential options
+--    -  Option A:  listen to deconstruction events, and replicate the event in the same area on the unapproved force
+--       -  TODO: Will the listener trigger though for mod-generated deconstruction events?
+--    -  Option B:  listen to on_pre_ghost_deconstructed and replay the deconstruction onto the unapproved force entity
+--    -  Even though in theory it's impossible to deconstruct the unapproved ghost entities, should probably sync on it anyways, to be safe (can test from editor)
+--       (i.e. listen for unapproved ghost deconstruction events, and remove the linked placeholder entity)
+-- 5. Upgrade planner:  likely won't be supported at first; I believe it's theoretically possible but difficult to implement
+--    -  Would likely need a full-mirror placeholder tree that properly links upgrade paths to parallel the original upgrade paths
+--    -  Might be able to get away with a simplified version, i.e. 'upgradeable-placeholder'
+--    -  Also might work to listen to upgrade events and replay the upgrade on the same area for the unapproved force
+--    -  Not sure how (if at all) 'customized' upgrade planners could be supported...the custom planner won't have upgrade rules for the placeholders
+--       -  Might be possible to do JIT modification of the planner rule-set when the player puts it in their cursor...would be tricky though
+-- 6. Modded selection-tools:  not sure if they can be supported; not worrying about for 1.0
+
+-- TODO: implement new plan
+--   Done: placeholder prototypes, placeholder creation
+--   TBD:  remove placeholder when ghost mined, blueprint JIT replacement, deconstruction linkage, placeholder appearance
 -- TODO: test tile ghost behavior
 -- TODO: update README.md, changelog, etc. in prep for 1.0 release
 -- TODO: flesh out post-1.0 roadmap.  Ideas:
@@ -10,9 +41,7 @@
   -- It might be possible to somehow use faux/placeholder ghost entities, instead of entity force manipulation.  This might be friendlier to BP/upgrading (not guaranteed though)
   -- Mod options, e.g. whether entities should be approved or unapproved when first built (default unapproved)
 -- TODO: note limitations
-  -- Blueprint, copy/paste, upgrade and deconstruction planners won't work on unapproved entities due to their nature as being on a separate force
-    -- Undo/redo does work, though
-    -- Workaround: approve then deconstruct
+  -- TBD (new plan works around blueprinting/deconstruction, but maybe other limitations?)
 -- TODO: release 1.0
 -- TODO: make mod API request in forums (not very hopeful but why not try...)
   -- Would like a flag to mark a force as 'ally' or something like that...with the idea being that blueprints, copy/cut/paste, upgrade planner, decon planner, etc. would all work on allied force entities the same as though they were on the player's force
@@ -73,6 +102,28 @@ function get_or_create_unapproved_ghost_force(base_force)
   return game.forces[unapproved_ghost_force_name]
 end
 
+function get_script_blueprint()
+  if not global.blueprintInventory then
+    local blueprintInventory = game.create_inventory(1)
+    blueprintInventory.insert({ name="blueprint"})
+    global.blueprintInventory = blueprintInventory
+  end
+  return global.blueprintInventory[1]
+end
+
+function to_blueprint_entity(entity)
+  local bp = get_script_blueprint()
+  bp.clear_blueprint()
+  bp.create_blueprint {
+    surface = entity.surface,
+    force = entity.force,
+    area = {{entity.position.x, entity.position.y}, {entity.position.x, entity.position.y}},
+    always_include_tiles = false
+  }
+  game.print("construction-planner: BlueprintEntity = " .. serpent.block(bp.get_blueprint_entities()))
+  return bp.get_blueprint_entities()
+end
+
 function approve_entities(entities)
   local baseForceCache = {}
 
@@ -103,6 +154,7 @@ function unapprove_entities(entities)
       end
       if (entity.force ~= unapproved_force) then
         entity.force = unapproved_force
+
         local badgeId = approvalBadges.getOrCreate(entity);
         approvalBadges.showUnapproved(badgeId)
       end
@@ -192,7 +244,54 @@ script.on_event(defines.events.on_player_alt_selected_area,
 script.on_event(defines.events.on_built_entity,
   function(event)
     -- game.print("construction-planner: detected new ghost entity (".. event.created_entity.ghost_name ..")")
+    -- to_blueprint_entity(event.created_entity)
+    local original_force = event.created_entity.force
     unapprove_entities({event.created_entity})
+
+    function createPlaceholderFor(entity)
+      entity.surface.create_entity {
+        name = "entity-ghost",
+        position = entity.position,
+        force = original_force,
+        inner_name = "unapproved-ghost-placeholder"
+      }
+    end
+    createPlaceholderFor(event.created_entity)
+    
+  end,
+  {{ filter="type", type="entity-ghost"}}
+)
+
+script.on_event(defines.events.on_player_setup_blueprint,
+  function(event)
+    -- game.print("construction-planner: on_player_setup_blueprint, event=" .. serpent.block(event));
+
+    local adjust_blueprint = function(blueprint)
+      -- blueprint.clear_blueprint()
+    end
+    
+    local player = game.players[event.player_index]
+    if (player.blueprint_to_setup.valid_for_read) then
+      adjust_blueprint(player.blueprint_to_setup)
+    end
+    if (player.is_cursor_blueprint()) then
+      adjust_blueprint(player.cursor_stack)
+    end
+  end
+)
+
+script.on_event(defines.events.on_pre_ghost_deconstructed,
+  function(event)
+    game.print("construction-planner: on_pre_ghost_deconstructed, event=" .. serpent.block(event));
+    -- TODO: if placeholder, deconstruct the actual entity as well
+  end
+)
+
+-- Note: this includes when the player right-clicks on ghost entities 
+script.on_event(defines.events.on_player_mined_entity,
+  function(event)
+    game.print("construction-planner: on_player_mined_entity, event=" .. serpent.block(event));
+    -- TODO: if placeholder, deconstruct the actual entity as well
   end,
   {{ filter="type", type="entity-ghost"}}
 )

@@ -58,7 +58,36 @@ local giveConstructionPlanner = {
     }
 }
 
+-- TODO: create proper item group/subgroup with icon, descriptions, etc.
+local unapproved_item_group = table.deepcopy(data.raw["item-group"]["other"]);
+unapproved_item_group.name = "unapproved-entities"
+local unapproved_item_subgroup = table.deepcopy(data.raw["item-subgroup"]["other"]);
+unapproved_item_subgroup.name = "unapproved-entities-subgroup"
+unapproved_item_subgroup.group = "unapproved-entities"
+
+local unapproved_ghost_placeholder = {
+    type = "simple-entity-with-owner",
+    name = "unapproved-ghost-placeholder",
+    flags = {"player-creation", "not-on-map", "hidden", "hide-alt-info", "not-flammable", "not-selectable-in-game", "not-in-kill-statistics"},
+    icon = "__base__/graphics/icons/steel-chest.png",
+    icon_size = 64, icon_mipmaps = 4,
+    picture = {
+      filename = "__base__/graphics/entity/steel-chest/steel-chest.png",
+      priority = "extra-high",
+      width = 32,
+      height = 40,
+      shift = util.by_pixel(-11, 4.5)
+    }
+}
+
+local unapproved_ghost_placeholder_item = table.deepcopy(data.raw["item"]["simple-entity-with-owner"])
+unapproved_ghost_placeholder_item.name = "unapproved-ghost-placeholder";
+unapproved_ghost_placeholder_item.place_result = "unapproved-ghost-placeholder"
+unapproved_ghost_placeholder_item.subgroup = "unapproved-entities-subgroup"
+
+
 data:extend{
-    constructionPlanner,
-    giveConstructionPlanner
+    constructionPlanner, giveConstructionPlanner,
+    unapproved_item_group, unapproved_item_subgroup,
+    unapproved_ghost_placeholder, unapproved_ghost_placeholder_item
 }
