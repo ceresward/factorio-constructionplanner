@@ -65,10 +65,17 @@ local unapproved_item_subgroup = table.deepcopy(data.raw["item-subgroup"]["other
 unapproved_item_subgroup.name = "unapproved-entities-subgroup"
 unapproved_item_subgroup.group = "unapproved-entities"
 
+-- Notes:
+--  - placeable-off-grid is used to ensure the entity will be placed in the exact same position as its counterpart
+--  - player-creation flag is necessary for the placeholder to be eligible as a ghost_target (as is the corresponding placeholder_item)
+--  - selection_box should not be enabled!  It allows the entity to be mined, in spite of the 'not-selectable-in-game' flag.
+--  - TODO: remove/replace the entity picture so it becomes truly invisible
+--  - TODO: would 'placeable_by' be helpful to specify? (core data doesn't seem to specify...)
 local unapproved_ghost_placeholder = {
     type = "simple-entity-with-owner",
     name = "unapproved-ghost-placeholder",
-    flags = {"player-creation", "not-on-map", "hidden", "hide-alt-info", "not-flammable", "not-selectable-in-game", "not-in-kill-statistics"},
+    flags = {"placeable-off-grid", "player-creation", "not-on-map", "hidden", "hide-alt-info", "not-flammable", "not-selectable-in-game", "not-in-kill-statistics"},
+    -- selection_box = {{-0.5, -0.5}, {0.5, 0.5}}, -- DO NOT ENABLE
     icon = "__base__/graphics/icons/steel-chest.png",
     icon_size = 64, icon_mipmaps = 4,
     picture = {
@@ -76,7 +83,7 @@ local unapproved_ghost_placeholder = {
       priority = "extra-high",
       width = 32,
       height = 40,
-      shift = util.by_pixel(-11, 4.5)
+    --   shift = util.by_pixel(-11, 4.5)
     }
 }
 

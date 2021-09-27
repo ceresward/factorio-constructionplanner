@@ -1,4 +1,4 @@
--- Note:  latest plan:
+-- Current design plan:
 -- 1. Use a friendly force to hold the unapproved entities, as I'm currently doing
 --    -  Advantage of this strategy is that it *should* preserve entity config and connections (inventories, filters, wire connections, etc.)
 --    -  Preserving config and connections is possible in theory with generated placeholders, but would necessarily be very complex and brittle due to API constraints
@@ -26,9 +26,9 @@
 --       -  Might be possible to do JIT modification of the planner rule-set when the player puts it in their cursor...would be tricky though
 -- 6. Modded selection-tools:  not sure if they can be supported; not worrying about for 1.0
 
--- TODO: implement new plan
---   Done: placeholder prototypes, placeholder creation
---   TBD:  remove placeholder when ghost mined, blueprint JIT replacement, deconstruction linkage, placeholder appearance
+-- TODO: implement new design
+--   Done: placeholder prototypes, placeholder creation, placeholder removal
+--   TBD:  deconstruction linkage (both ways to be sure), blueprint JIT replacement, approval tool selection filters, placeholder appearance, misc TODOs
 -- TODO: test tile ghost behavior
 -- TODO: update README.md, changelog, etc. in prep for 1.0 release
 -- TODO: flesh out post-1.0 roadmap.  Ideas:
@@ -70,6 +70,10 @@ function parse_base_force_name(force_name)
   else
       return force_name
   end
+end
+
+function entity_debug_string(entity)
+  return entity.type .. " of " .. entity.force.name .. " @ " .. serpent.line(entity.position)
 end
 
 DIPLOMACY_SYNC_IN_PROGRESS = false
@@ -124,6 +128,32 @@ function to_blueprint_entity(entity)
   return bp.get_blueprint_entities()
 end
 
+function create_placeholder_for(unapproved_entity)
+  -- Note: the placeholder has to be a ghost, otherwise it will overwrite the unapproved entity, and mess up the deconstruction planner interaction
+  local placeholder = unapproved_entity.surface.create_entity {
+    name = "entity-ghost",
+    position = unapproved_entity.position,
+    force = parse_base_force_name(unapproved_entity.force.name),
+    inner_name = "unapproved-ghost-placeholder"
+  }
+  -- game.print("Unapproved entity: " .. entity_debug_string(event.created_entity))
+  -- game.print("Placeholder: " .. entity_debug_string(placeholder))
+  return placeholder
+end
+
+function remove_placeholder_for(unapproved_entity)
+  -- Note: this search works only because the placeholder will be at the *same exact position* as the unapproved entity
+  local placeholders = unapproved_entity.surface.find_entities_filtered {
+    position = unapproved_entity.position,
+    ghost_name = "unapproved-ghost-placeholder"
+  }
+
+  -- Only one placeholder is expected, but if multiple are discovered for whatever reason, just remove them all
+  for _, placeholder in pairs(placeholders) do
+    placeholder.destroy()
+  end
+end
+
 function approve_entities(entities)
   local baseForceCache = {}
 
@@ -135,7 +165,10 @@ function approve_entities(entities)
       baseForceCache[entity.force.name] = base_force
     end
     if (entity.force ~= base_force) then
+      remove_placeholder_for(entity)
+
       entity.force = base_force
+
       local badgeId = approvalBadges.getOrCreate(entity);
       approvalBadges.showApproved(badgeId)
     end
@@ -157,6 +190,8 @@ function unapprove_entities(entities)
 
         local badgeId = approvalBadges.getOrCreate(entity);
         approvalBadges.showUnapproved(badgeId)
+
+        create_placeholder_for(entity)
       end
     end
   end
@@ -243,21 +278,9 @@ script.on_event(defines.events.on_player_alt_selected_area,
 
 script.on_event(defines.events.on_built_entity,
   function(event)
-    -- game.print("construction-planner: detected new ghost entity (".. event.created_entity.ghost_name ..")")
-    -- to_blueprint_entity(event.created_entity)
-    local original_force = event.created_entity.force
+    -- game.print("construction-planner: detected new ghost entity " .. entity_debug_string(event.created_entity)")
+    local base_force = event.created_entity.force
     unapprove_entities({event.created_entity})
-
-    function createPlaceholderFor(entity)
-      entity.surface.create_entity {
-        name = "entity-ghost",
-        position = entity.position,
-        force = original_force,
-        inner_name = "unapproved-ghost-placeholder"
-      }
-    end
-    createPlaceholderFor(event.created_entity)
-    
   end,
   {{ filter="type", type="entity-ghost"}}
 )
@@ -290,8 +313,15 @@ script.on_event(defines.events.on_pre_ghost_deconstructed,
 -- Note: this includes when the player right-clicks on ghost entities 
 script.on_event(defines.events.on_player_mined_entity,
   function(event)
-    game.print("construction-planner: on_player_mined_entity, event=" .. serpent.block(event));
-    -- TODO: if placeholder, deconstruct the actual entity as well
+    -- game.print("construction-planner: on_player_mined_entity, event=" .. serpent.block(event));
+    local entity = event.entity
+    
+    -- If an unapproved entity was mined, find and remove the placeholder as well
+    local base_force_name = parse_base_force_name(entity.force.name)
+    if (base_force_name ~= entity.force.name) then
+      -- game.print("Unapproved ghost mined: " .. entity_debug_string(entity))
+      remove_placeholder_for(entity)
+    end
   end,
   {{ filter="type", type="entity-ghost"}}
 )
