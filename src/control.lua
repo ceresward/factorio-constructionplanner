@@ -27,8 +27,9 @@
 -- 6. Modded selection-tools:  not sure if they can be supported; not worrying about for 1.0
 
 -- TODO: implement new design
---   Done: placeholder prototypes, placeholder creation, placeholder removal
---   TBD:  deconstruction linkage (both ways to be sure), blueprint JIT replacement, approval tool selection filters, placeholder appearance, misc TODOs
+--   Done: placeholder prototypes, placeholder creation, placeholder removal, deconstruction linkage (both ways to be sure), blueprint JIT replacement
+--   TBD:  improved blueprint replacement (full-area shadow blueprinting for circuit connections), approval tool selection filters,
+--         placeholder appearance, misc TODOs
 -- TODO: test tile ghost behavior
 -- TODO: update README.md, changelog, etc. in prep for 1.0 release
 -- TODO: flesh out post-1.0 roadmap.  Ideas:
@@ -74,6 +75,14 @@ end
 
 function entity_debug_string(entity)
   return entity.type .. " of " .. entity.force.name .. " @ " .. serpent.line(entity.position)
+end
+
+function first_match_or_nil(table)
+  if table_size(table) == 0 then
+    return nil
+  else 
+    return table[1]
+  end
 end
 
 DIPLOMACY_SYNC_IN_PROGRESS = false
@@ -124,8 +133,16 @@ function to_blueprint_entity(entity)
     area = {{entity.position.x, entity.position.y}, {entity.position.x, entity.position.y}},
     always_include_tiles = false
   }
-  game.print("construction-planner: BlueprintEntity = " .. serpent.block(bp.get_blueprint_entities()))
-  return bp.get_blueprint_entities()
+  -- game.print("to_blueprint_entity: BlueprintEntity = " .. serpent.line(bp.get_blueprint_entities()))
+  return first_match_or_nil(bp.get_blueprint_entities())
+end
+
+function is_placeholder(entity)
+  return entity.type == "entity-ghost" and entity.ghost_name == "unapproved-ghost-placeholder"
+end
+
+function is_bp_placeholder(entity)
+  return entity.name == "unapproved-ghost-placeholder"
 end
 
 function create_placeholder_for(unapproved_entity)
@@ -145,12 +162,35 @@ function remove_placeholder_for(unapproved_entity)
   -- Note: this search works only because the placeholder will be at the *same exact position* as the unapproved entity
   local placeholders = unapproved_entity.surface.find_entities_filtered {
     position = unapproved_entity.position,
+    force = parse_base_force_name(unapproved_entity.force.name),
     ghost_name = "unapproved-ghost-placeholder"
   }
 
   -- Only one placeholder is expected, but if multiple are discovered for whatever reason, just remove them all
   for _, placeholder in pairs(placeholders) do
     placeholder.destroy()
+  end
+end
+
+function find_unapproved_ghost_for(placeholder)
+  local unapproved_ghosts = placeholder.surface.find_entities_filtered {
+    position = placeholder.position,
+    force = to_unapproved_ghost_force_name(placeholder.force.name),
+    name = "entity-ghost"
+  }
+  return first_match_or_nil(unapproved_ghosts)
+end
+
+function remove_unapproved_ghost_for(placeholder)
+  local unapproved_ghosts = placeholder.surface.find_entities_filtered {
+    position = placeholder.position,
+    force = to_unapproved_ghost_force_name(placeholder.force.name),
+    name = "entity-ghost"
+  }
+
+  -- Only one placeholder is expected, but if multiple are discovered for whatever reason, just remove them all
+  for _, unapproved_ghost in pairs(unapproved_ghosts) do
+    unapproved_ghost.destroy()
   end
 end
 
@@ -287,10 +327,41 @@ script.on_event(defines.events.on_built_entity,
 
 script.on_event(defines.events.on_player_setup_blueprint,
   function(event)
+    -- Note: this event fires not just for blueprints, but for copy operations as well
     -- game.print("construction-planner: on_player_setup_blueprint, event=" .. serpent.block(event));
 
     local adjust_blueprint = function(blueprint)
-      -- blueprint.clear_blueprint()
+      local blueprintEntities = blueprint.get_blueprint_entities()
+      if not blueprintEntities then
+        return
+      end
+
+      local placeholder_found = false
+      local adjustedBlueprintEntities = {}
+      for _, blueprintEntity in pairs(blueprintEntities) do
+        if is_bp_placeholder(blueprintEntity) then
+          placeholder_found = true
+          local placeholder = event.mapping.get()[blueprintEntity.entity_number]
+          local unapproved_ghost = find_unapproved_ghost_for(placeholder)
+          -- game.print(serpent.line(placeholder))
+          -- game.print(serpent.line(unapproved_ghost))
+          if unapproved_ghost then
+            local replacement = to_blueprint_entity(unapproved_ghost)
+            replacement.entity_number = blueprintEntity.entity_number
+            -- game.print("Original BlueprintEntity: " .. serpent.line(blueprintEntity))
+            -- game.print("Replacement BlueprintEntity: " .. serpent.line(replacement))
+            table.insert(adjustedBlueprintEntities, replacement)
+          end
+        else
+          table.insert(adjustedBlueprintEntities, blueprintEntity)
+        end
+      end
+
+      if placeholder_found then 
+        game.print("Placeholders detected; adjusting blueprint")
+        blueprint.clear_blueprint()
+        blueprint.set_blueprint_entities(adjustedBlueprintEntities)
+      end
     end
     
     local player = game.players[event.player_index]
@@ -305,8 +376,16 @@ script.on_event(defines.events.on_player_setup_blueprint,
 
 script.on_event(defines.events.on_pre_ghost_deconstructed,
   function(event)
-    game.print("construction-planner: on_pre_ghost_deconstructed, event=" .. serpent.block(event));
-    -- TODO: if placeholder, deconstruct the actual entity as well
+    -- game.print("construction-planner: on_pre_ghost_deconstructed, event=" .. serpent.block(event));
+    local entity = event.ghost
+
+    -- If a placeholder was deconstructed, find and remove the unapproved entity as well
+    -- If an unapproved entity was deconstructed (somehow), find and remove the placeholder as well
+    if is_placeholder(entity) then
+      remove_unapproved_ghost_for(entity)
+    elseif (is_unapproved_ghost_force_name(entity.force.name)) then
+        remove_placeholder_for(entity)
+    end
   end
 )
 
@@ -317,13 +396,12 @@ script.on_event(defines.events.on_player_mined_entity,
     local entity = event.entity
     
     -- If an unapproved entity was mined, find and remove the placeholder as well
-    local base_force_name = parse_base_force_name(entity.force.name)
-    if (base_force_name ~= entity.force.name) then
+    if (is_unapproved_ghost_force_name(entity.force.name)) then
       -- game.print("Unapproved ghost mined: " .. entity_debug_string(entity))
       remove_placeholder_for(entity)
     end
   end,
-  {{ filter="type", type="entity-ghost"}}
+  {{filter="type", type="entity-ghost"}}
 )
 
 -------------------------------------------------------------------------------
