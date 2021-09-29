@@ -1,4 +1,4 @@
--- Current design plan:
+-- Current design plan (save this until I have a good 'How it works' section in the README/modpage):
 -- 1. Use a friendly force to hold the unapproved entities, as I'm currently doing
 --    -  Advantage of this strategy is that it *should* preserve entity config and connections (inventories, filters, wire connections, etc.)
 --    -  Preserving config and connections is possible in theory with generated placeholders, but would necessarily be very complex and brittle due to API constraints
@@ -28,9 +28,10 @@
 
 -- TODO: implement new design
 --   Done: placeholder prototypes, placeholder creation, placeholder removal, deconstruction linkage (both ways to be sure), blueprint JIT replacement
---   TBD:  improved blueprint replacement (full-area shadow blueprinting for circuit connections), approval tool selection filters,
---         placeholder appearance, misc TODOs
+--   TBD:  approval tool selection filters, placeholder appearance, misc TODOs
 -- TODO: test tile ghost behavior
+-- TODO: disable approval-related features until approval tool is unlocked (don't move ghosts to unapproved force, and don't show the approval badge)
+  -- Or maybe approval tool should be unlocked from start-of-game?
 -- TODO: update README.md, changelog, etc. in prep for 1.0 release
 -- TODO: flesh out post-1.0 roadmap.  Ideas:
   -- Replace 'draw_text' with 'draw_sprite' and a better icon? (maybe hammer or hammer-and-wrench?)
@@ -38,9 +39,16 @@
   -- Use "on_entity_changed_force", if Wube decides to add it
   -- Forces library?
   -- More efficient force-based logic?  (regex = slow)
-  -- Some sort of toggle switch to temporarily turn off the mod (i.e. move all ghosts to main force, hide badge, etc.) to make it easier to work around BP/upgrade limitations
-  -- It might be possible to somehow use faux/placeholder ghost entities, instead of entity force manipulation.  This might be friendlier to BP/upgrading (not guaranteed though)
-  -- Mod options, e.g. whether entities should be approved or unapproved when first built (default unapproved)
+  -- Mod preferences...ideas:
+    -- Whether entities should start out approved or unapproved when first built (default unapproved)
+    -- Allow building of unapproved entities when there are no remaining approved entities to build (within a given logistic network?)
+    -- Allow building of unapproved entities of a given type if there are enough spare resources of that type + available construction bots (within a given logistic network)
+    -- Unlock at start of game, or with construction bots
+  -- Find some way for the placeholders to have a proper selection border during BP/decon/approval selection
+    -- Prototype would likely need a selection_box.  But how to work around the fact that the placeholder remains mineable?
+    -- Maybe just work with the mineable placeholder, and use some sort of rendering trick to make it look like the placeholder is the real deal, instead of trying to hide it
+    -- But that might not work well with wires/circuits/etc...it may be difficult/brittle to accurately fake those
+    -- Also, quick-select might prove tricky...would need to be able to intercept the event on the placeholder and replace it with the real deal
 -- TODO: note limitations
   -- TBD (new plan works around blueprinting/deconstruction, but maybe other limitations?)
 -- TODO: release 1.0
@@ -83,6 +91,21 @@ function first_match_or_nil(table)
   else 
     return table[1]
   end
+end
+
+function position_string(position)
+  local result = tostring(position.x) .. ":" .. tostring(position.y)
+  -- game.print("Position string: " .. serpent.line(position) .. " --> " .. result)
+  return result
+end
+
+-- Maps a list of elements by some property of that element
+function reassociate(array, fnNewKey)
+  local result = {}
+  for key, value in pairs(array or {}) do
+    result[fnNewKey(key, value)] = value
+  end
+  return result
 end
 
 DIPLOMACY_SYNC_IN_PROGRESS = false
@@ -172,13 +195,16 @@ function remove_placeholder_for(unapproved_entity)
   end
 end
 
-function find_unapproved_ghost_for(placeholder)
-  local unapproved_ghosts = placeholder.surface.find_entities_filtered {
-    position = placeholder.position,
-    force = to_unapproved_ghost_force_name(placeholder.force.name),
-    name = "entity-ghost"
+function get_unapproved_ghost_bp_entities(surface, force, area)
+  local bp = get_script_blueprint()
+  bp.clear_blueprint()
+  bp.create_blueprint {
+    surface = surface,
+    force = force,
+    area = area,
+    always_include_tiles = false
   }
-  return first_match_or_nil(unapproved_ghosts)
+  return bp.get_blueprint_entities()
 end
 
 function remove_unapproved_ghost_for(placeholder)
@@ -330,6 +356,8 @@ script.on_event(defines.events.on_player_setup_blueprint,
     -- Note: this event fires not just for blueprints, but for copy operations as well
     -- game.print("construction-planner: on_player_setup_blueprint, event=" .. serpent.block(event));
 
+    local player = game.players[event.player_index]
+
     local adjust_blueprint = function(blueprint)
       local blueprintEntities = blueprint.get_blueprint_entities()
       if not blueprintEntities then
@@ -338,18 +366,24 @@ script.on_event(defines.events.on_player_setup_blueprint,
 
       local placeholder_found = false
       local adjustedBlueprintEntities = {}
+      local unapprovedBlueprintEntitiesMap = nil
       for _, blueprintEntity in pairs(blueprintEntities) do
         if is_bp_placeholder(blueprintEntity) then
           placeholder_found = true
-          local placeholder = event.mapping.get()[blueprintEntity.entity_number]
-          local unapproved_ghost = find_unapproved_ghost_for(placeholder)
-          -- game.print(serpent.line(placeholder))
-          -- game.print(serpent.line(unapproved_ghost))
-          if unapproved_ghost then
-            local replacement = to_blueprint_entity(unapproved_ghost)
+
+          if not unapprovedBlueprintEntitiesMap then
+            local force_name = to_unapproved_ghost_force_name(player.force.name)
+            local unapprovedBlueprintEntities = get_unapproved_ghost_bp_entities(event.surface, force_name, event.area)
+            unapprovedBlueprintEntitiesMap = reassociate(unapprovedBlueprintEntities,
+              function(_, blueprintEntity)
+                return position_string(blueprintEntity.position)
+              end
+            )
+          end
+
+          local replacement = unapprovedBlueprintEntitiesMap[position_string(blueprintEntity.position)]
+          if replacement then
             replacement.entity_number = blueprintEntity.entity_number
-            -- game.print("Original BlueprintEntity: " .. serpent.line(blueprintEntity))
-            -- game.print("Replacement BlueprintEntity: " .. serpent.line(replacement))
             table.insert(adjustedBlueprintEntities, replacement)
           end
         else
@@ -358,13 +392,12 @@ script.on_event(defines.events.on_player_setup_blueprint,
       end
 
       if placeholder_found then 
-        game.print("Placeholders detected; adjusting blueprint")
+        -- game.print("Placeholders detected; adjusting blueprint")
         blueprint.clear_blueprint()
         blueprint.set_blueprint_entities(adjustedBlueprintEntities)
       end
     end
     
-    local player = game.players[event.player_index]
     if (player.blueprint_to_setup.valid_for_read) then
       adjust_blueprint(player.blueprint_to_setup)
     end
