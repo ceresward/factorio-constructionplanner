@@ -2,11 +2,9 @@
 -- 1. Use a friendly force to hold the unapproved entities, as I'm currently doing
 --    -  Advantage of this strategy is that it *should* preserve entity config and connections (inventories, filters, wire connections, etc.)
 --    -  Preserving config and connections is possible in theory with generated placeholders, but would necessarily be very complex and brittle due to API constraints
---    -  TODO: will undo/redo still work as expected?  (i.e. will both the placeholder entities and unapproved entities be cleared when undoing a stamp?)
---       -  Betting it won't work out-of-the-box, but I expect there should be an event I can listen to so I can fix up things
+--    -  Undo/redo don't work out of the box, but it might be possible to listen to some event and fix things up...
 -- 2. Create 'placeholder' entities - invisible entities that are positioned over the unapproved ghosts and can be selected by selection-tools
---    -  TODO: what to do about placeholder entity right-click?  (i.e. 'mining')?  Since the friendly force is also mineable...
---       -  It might be possible to make the placeholders non-mineable.  Ideally, they should only be interactable via the selection-tools
+--    -  Placeholder entities won't be mineable as long as their selection-size is not specified.  It makes BP selection look a little weird, but it works...
 --    -  Placeholders should be destroyed whenever the unapproved entity is destroyed, and vice-versa
 --       -  Events on_pre_ghost_deconstructed + on_player_mined_entity combined should cover the normal circumstancs...are there others though?
 -- 3. Blueprint/copy:  do JIT replacement of the placeholder entities in the BP w/ the entities from the unapproved force
@@ -14,8 +12,7 @@
 --    -  Swap: should be okay to simply remove all placeholder entities from the original BP, then add in all entities from the generated BP
 -- 4. Deconstruction:  two potential options
 --    -  Option A:  listen to deconstruction events, and replicate the event in the same area on the unapproved force
---       -  TODO: Will the listener trigger though for mod-generated deconstruction events?
---    -  Option B:  listen to on_pre_ghost_deconstructed and replay the deconstruction onto the unapproved force entity
+--    -  Option B:  listen to on_pre_ghost_deconstructed and replay the deconstruction onto the unapproved force entity (chosen option)
 --    -  Even though in theory it's impossible to deconstruct the unapproved ghost entities, should probably sync on it anyways, to be safe (can test from editor)
 --       (i.e. listen for unapproved ghost deconstruction events, and remove the linked placeholder entity)
 -- 5. Upgrade planner:  likely won't be supported at first; I believe it's theoretically possible but difficult to implement
@@ -26,16 +23,13 @@
 --       -  Might be possible to do JIT modification of the planner rule-set when the player puts it in their cursor...would be tricky though
 -- 6. Modded selection-tools:  not sure if they can be supported; not worrying about for 1.0
 
--- TODO: implement new design
---   Done: placeholder prototypes, placeholder creation, placeholder removal, deconstruction linkage (both ways to be sure), blueprint JIT replacement
---   TBD:  approval tool selection filters, placeholder appearance, misc TODOs
--- TODO: test tile ghost behavior
--- TODO: disable approval-related features until approval tool is unlocked (don't move ghosts to unapproved force, and don't show the approval badge)
-  -- Or maybe approval tool should be unlocked from start-of-game?
+
 -- TODO: update README.md, changelog, etc. in prep for 1.0 release
 -- TODO: flesh out post-1.0 roadmap.  Ideas:
-  -- Replace 'draw_text' with 'draw_sprite' and a better icon? (maybe hammer or hammer-and-wrench?)
+  -- Badges: replace 'draw_text' with 'draw_sprite' and a better icon? (maybe hammer or hammer-and-wrench?)
   -- Improved graphics for the shortcut and/or selection-tool, maybe thumbnail as well
+  -- Support approval/unapproval on tile ghosts (+ option to enable/disable it?)
+  -- Undo support for approval/unapproval? (need to research in mod API)
   -- Use "on_entity_changed_force", if Wube decides to add it
   -- Forces library?
   -- More efficient force-based logic?  (regex = slow)
@@ -103,7 +97,10 @@ end
 function reassociate(array, fnNewKey)
   local result = {}
   for key, value in pairs(array or {}) do
-    result[fnNewKey(key, value)] = value
+    local newKey = fnNewKey(key, value)
+    if newKey ~= nil then
+      result[newKey] = value
+    end
   end
   return result
 end
@@ -245,7 +242,7 @@ function unapprove_entities(entities)
   local unapprovedForceCache = {}
 
   for _, entity in pairs(entities) do
-    if not is_unapproved_ghost_force_name(entity.force.name) then
+    if not is_placeholder(entity) and not is_unapproved_ghost_force_name(entity.force.name) then
       local unapproved_force = unapprovedForceCache[entity.force.name]
       if not unapproved_force then
         unapproved_force = get_or_create_unapproved_ghost_force(entity.force)
@@ -345,8 +342,15 @@ script.on_event(defines.events.on_player_alt_selected_area,
 script.on_event(defines.events.on_built_entity,
   function(event)
     -- game.print("construction-planner: detected new ghost entity " .. entity_debug_string(event.created_entity)")
-    local base_force = event.created_entity.force
-    unapprove_entities({event.created_entity})
+    -- TODO: ask on the forums if is_shortcut_available can be made available for all mod-defined shortcuts
+    --       (but first ask in Discord if there's another way that I'm just missing)
+    -- local player = game.players[event.player_index]
+    -- if player.is_shortcut_available("give-construction-planner") then
+      local base_force = event.created_entity.force
+      unapprove_entities({event.created_entity})
+    -- else
+    --   approve_entities({event.created_entity})
+    -- end
   end,
   {{ filter="type", type="entity-ghost"}}
 )
