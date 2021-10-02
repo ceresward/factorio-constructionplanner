@@ -20,6 +20,7 @@ Additional information about mod features and limitations can be found on the [F
 ## Roadmap
 
 ### 1.1
+- [ ] Ignore destroyed entity ghosts when approving/unapproving ghosts using the Construction Planner tool
 - [ ] Support for entity filters when using the approval tool (similar to the deconstruction planner)
 - [ ] Toggle switch to allow/disallow building of unapproved ghosts if there are no approved ghosts left to build
 
