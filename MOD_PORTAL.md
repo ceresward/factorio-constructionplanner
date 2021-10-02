@@ -13,7 +13,7 @@ Why use Construction Planner?
 ## Features
 
 - Ghost entities are no longer built automatically by construction bots; instead, they must first be approved by the player
-  - Exception: ghosts created when an entity is destroyed don't require approval and will be rebuilt as usual
+    - Exception: ghosts created when an entity is destroyed don't require approval and will be rebuilt as usual
 - Use the Construction Planner tool (in the shortcut bar) to approve and unapprove ghosts for construction
 - Use the auto-approve mod setting to save time when you just want everything to be approved as soon as you stamp it
 
