@@ -21,6 +21,7 @@ Why use Construction Planner?
 - The upgrade planner doesn't yet work on unapproved ghosts
 - Blueprinting and deconstruction of unapproved ghosts works, but the selection border will look a little strange
 - If an approved entity becomes unapproved, any construction bots already en route won't turn around until they reach the build site (compare this to when a ghost is deconstructed, in which case the bots turn around immediately)
+- Destroyed entity ghosts don't require approval; they will just get rebuilt as usual.  However there is a bug right now where they can still be 'unapproved' using the Construction Planner tool.  Keep this in mind when using the selection tool to unapprove areas!
 
 # Roadmap
 
