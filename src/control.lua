@@ -13,7 +13,9 @@
 
 local approvalBadges = require("control.approvalBadges")
 
-FORCE_REGEX = "(.+)%.unapproved_ghosts"
+local UINT32_MAX = 4294967295
+local FORCE_REGEX = "(.+)%.unapproved_ghosts"
+
 function is_unapproved_ghost_force_name(force_name)
   return string.match(force_name, FORCE_REGEX) ~= nil
 end
@@ -177,22 +179,33 @@ function is_auto_approve(player)
   return settings.get_player_settings(player)["constructionPlanner-auto-approve"].value
 end
 
+function is_approvable_ghost(entity)
+  function is_perishable(entity)
+    -- In theory, entity.time_to_live <= entity.force.ghost_time_to_live would also work..but this seems safer
+    return entity.time_to_live < UINT32_MAX
+  end
+
+  return entity and entity.type == "entity-ghost" and not is_placeholder(entity) and not is_perishable(entity)
+end
+
 function approve_entities(entities)
   local baseForceCache = {}
 
   for _, entity in pairs(entities) do
-    local base_force = baseForceCache[entity.force.name]
-    if not base_force then
-      local base_force_name = parse_base_force_name(entity.force.name)
-      base_force = game.forces[base_force_name]
-      baseForceCache[entity.force.name] = base_force
+    if is_approvable_ghost(entity) then
+      local base_force = baseForceCache[entity.force.name]
+      if not base_force then
+        local base_force_name = parse_base_force_name(entity.force.name)
+        base_force = game.forces[base_force_name]
+        baseForceCache[entity.force.name] = base_force
+      end
+      if (entity.force ~= base_force) then
+        remove_placeholder_for(entity)
+        entity.force = base_force
+      end
+      local badgeId = approvalBadges.getOrCreate(entity);
+      approvalBadges.showApproved(badgeId)
     end
-    if (entity.force ~= base_force) then
-      remove_placeholder_for(entity)
-      entity.force = base_force
-    end
-    local badgeId = approvalBadges.getOrCreate(entity);
-    approvalBadges.showApproved(badgeId)
   end
 end
 
@@ -200,15 +213,17 @@ function unapprove_entities(entities)
   local unapprovedForceCache = {}
 
   for _, entity in pairs(entities) do
-    if not is_placeholder(entity) and not is_unapproved_ghost_force_name(entity.force.name) then
-      local unapproved_force = unapprovedForceCache[entity.force.name]
-      if not unapproved_force then
-        unapproved_force = get_or_create_unapproved_ghost_force(entity.force)
-        unapprovedForceCache[entity.force.name] = unapproved_force
-      end
-      if (entity.force ~= unapproved_force) then
-        entity.force = unapproved_force
-        create_placeholder_for(entity)
+    if is_approvable_ghost(entity) then
+      if not is_unapproved_ghost_force_name(entity.force.name) then
+        local unapproved_force = unapprovedForceCache[entity.force.name]
+        if not unapproved_force then
+          unapproved_force = get_or_create_unapproved_ghost_force(entity.force)
+          unapprovedForceCache[entity.force.name] = unapproved_force
+        end
+        if (entity.force ~= unapproved_force) then
+          entity.force = unapproved_force
+          create_placeholder_for(entity)
+        end
       end
       local badgeId = approvalBadges.getOrCreate(entity);
       approvalBadges.showUnapproved(badgeId)

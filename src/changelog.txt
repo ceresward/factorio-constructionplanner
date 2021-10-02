@@ -1,4 +1,9 @@
 ---------------------------------------------------------------------------------------------------
+Version: 1.0.1
+Date: 02. 10. 2021
+  Other:
+    - Ghosts from destroyed entities are now ignored by the approval tool (they will be rebuilt without approval)
+---------------------------------------------------------------------------------------------------
 Version: 1.0.0
 Date: 01. 10. 2021
   Other:
