@@ -1,8 +1,10 @@
--- Note: the original hope was to use a deconstruction planner as the prototype, so I could benefit from the built-in
--- filtering functionality.  However, there is no pragmatic way to prevent the deconstruction behavior from actually
--- occurring, i.e. prevent the selection from actually removing the ghosts as a deconstruction planner normally does.
--- So instead, I'm forced to use a selection-tool, and accept the fact that the entity highlighting won't work unless
--- Wube adds support for it in some future update.
+-- TODO: Improved graphics for the shortcut and/or selection-tool, maybe thumbnail as well?
+-- TODO: Find some way for the placeholders to have a proper selection border during BP/decon/approval selection
+    -- Prototype would likely need a selection_box.  But how to work around the fact that the placeholder remains mineable?
+    -- Maybe just work with the mineable placeholder, and use some sort of rendering trick to make it look like the placeholder is the real deal, instead of trying to hide it
+    -- But that might not work well with wires/circuits/etc...it may be difficult/brittle to accurately fake those
+    -- Also, quick-select might prove tricky...would need to be able to intercept the event on the placeholder and replace it with the real deal
+
 local constructionPlanner = {
     type = "selection-tool",
     name = "construction-planner",
@@ -74,6 +76,7 @@ local giveConstructionPlanner = {
     }
 }
 
+-- Note: this item group and subgroup help to organize the placeholder icon in the editor 'all entities' list
 local unapproved_item_group = table.deepcopy(data.raw["item-group"]["other"]);
 unapproved_item_group.name = "unapproved-entities"
 unapproved_item_group.icons = {
@@ -84,8 +87,8 @@ unapproved_item_subgroup.name = "unapproved-entities-subgroup"
 unapproved_item_subgroup.group = "unapproved-entities"
 
 -- Notes:
---  - placeable-off-grid is used to ensure the entity will be placed in the exact same position as its counterpart
---  - player-creation flag is necessary for the placeholder to be eligible as a ghost_target (as is the corresponding placeholder_item)
+--  - placeable-off-grid is used to ensure the entity will have the exact same position coordinates as its counterpart
+--  - player-creation flag is necessary for the placeholder to be contained within a ghost
 --  - selection_box should not be enabled!  It allows the entity to be mined, in spite of the 'not-selectable-in-game' flag.
 local unapproved_ghost_placeholder = {
     type = "simple-entity-with-owner",
@@ -105,6 +108,9 @@ local unapproved_ghost_placeholder = {
     }
 }
 
+-- Notes:
+--  - This item is necessary for the placeholder to be contained within a ghost (probably b/c the blueprint tool needs to show the icon during selection)
+--  - The icon is also used for placeholders in the editor 'all entities' list
 local unapproved_ghost_placeholder_item = table.deepcopy(data.raw["item"]["simple-entity-with-owner"])
 unapproved_ghost_placeholder_item.name = "unapproved-ghost-placeholder";
 unapproved_ghost_placeholder_item.place_result = "unapproved-ghost-placeholder"

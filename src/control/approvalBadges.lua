@@ -2,6 +2,7 @@ local approvalBadges = {}
 
 local badgeScale = 2
 
+-- TODO: consider replacing 'draw_text' with 'draw_sprite' and a better icon? (maybe Unicode hammer or hammer-and-wrench?)
 -- Unicode marks, for convenience:
 --   Useable:  ✘ ✔
 --   Not useable:  🛠
