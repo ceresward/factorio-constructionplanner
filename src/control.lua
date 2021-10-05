@@ -312,7 +312,8 @@ script.on_event(defines.events.on_player_alt_selected_area,
 
 script.on_event(defines.events.on_built_entity,
   function(event)
-    -- game.print("construction-planner: detected new ghost entity " .. entity_debug_string(event.created_entity)")
+    -- game.print("construction-planner: detected new ghost entity " .. entity_debug_string(event.created_entity))
+    -- game.print("  Tags: " .. serpent.line(event.created_entity.tags))
     
     local player = game.players[event.player_index]
     if not is_auto_approve(player) then
@@ -390,7 +391,7 @@ script.on_event(defines.events.on_player_setup_blueprint,
 
 script.on_event(defines.events.on_pre_ghost_deconstructed,
   function(event)
-    -- game.print("construction-planner: on_pre_ghost_deconstructed, event=" .. serpent.block(event));
+    -- game.print("construction-planner: on_pre_ghost_deconstructed for ghost " .. entity_debug_string(event.ghost));
     local entity = event.ghost
 
     -- If a placeholder was deconstructed, find and remove the unapproved entity as well
@@ -416,6 +417,25 @@ script.on_event(defines.events.on_player_mined_entity,
     end
   end,
   {{filter="type", type="entity-ghost"}}
+)
+
+script.on_event(defines.events.on_pre_build,
+  function(event)
+    -- If the player is about to build an entity in the same exact position as an unapproved ghost, approve the ghost
+    -- before the build happens.  This restores the ghost to the main force so that any special logic like recipe
+    -- preservation will be handled properly when the entity gets built.
+    local player = game.players[event.player_index]
+    local unapproved_ghosts = player.surface.find_entities_filtered {
+      position = event.position,
+      force = to_unapproved_ghost_force_name(player.force.name),
+      name = "entity-ghost"
+    }
+
+    if #unapproved_ghosts > 0 then
+      -- game.print("Approving " .. #unapproved_ghosts .. " ghosts on pre-build")
+      approve_entities(unapproved_ghosts)
+    end
+  end
 )
 
 -------------------------------------------------------------------------------
