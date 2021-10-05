@@ -1,7 +1,12 @@
 ---------------------------------------------------------------------------------------------------
+Version: 1.0.2
+Date: 04. 10. 2021
+  Bugfixes:
+    - Hand-placing assemblers, etc. on top of unapproved ghosts will now preserve the ghost recipe, same as vanilla ghosts
+---------------------------------------------------------------------------------------------------
 Version: 1.0.1
 Date: 02. 10. 2021
-  Other:
+  Bugfixes:
     - Ghosts from destroyed entities are now ignored by the approval tool (they will be rebuilt without approval)
 ---------------------------------------------------------------------------------------------------
 Version: 1.0.0
