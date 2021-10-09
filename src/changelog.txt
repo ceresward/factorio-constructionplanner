@@ -1,4 +1,10 @@
 ---------------------------------------------------------------------------------------------------
+Version: 1.0.4
+Date: 09. 10. 2021
+  Bugfixes:
+    - Fixed an issue with copying/blueprinting of ghost circuit connection data
+    - Fixed a compatibility issue between this mod and the Creative Mod instant blueprint feature
+---------------------------------------------------------------------------------------------------
 Version: 1.0.3
 Date: 05. 10. 2021
   Bugfixes:

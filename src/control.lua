@@ -11,7 +11,7 @@
 --       mod, and hope that other mods don't mess around with the forces too much.  For /editor force changes during
 --       testing, I can use a console command + remote interface to manually force a badge rescan.
 
---  TODO: investigate item-request-proxy and whether or not there might be any issues related to that
+--  TODO: investigate item-request-proxy and whether or not there might be any issues related to that (i.e. are assembler module requests remembered?)
 --  TODO: resolve bugs
 --    1. Placeholder ghost deconstruction can be brought back via undo
 --      - There isn't a way to hook into undo events that I can tell.  I'll have to find another way.
@@ -26,22 +26,8 @@
 --       ghosts and/or removing the placeholder before the decon planner can act on it
 --      - Use LuaPreGhostDeconstructedEventFilter to make it more efficient
 --      [X] Confirm/reproduce
---      [ ] Fix
---    2. Game crash involving missing circuit_id somehow
---      - I have doubts that I'll be able to reproduce this, but try anyways.  Might have to wait and see if the
---        reporter can provide more info
---      - Speculative guess:  something to do with circuit connections crossing approved/unapproved ghost boundaries?
---      - Firmer guess:  it seems circuit connections get moved sometimes when blueprinting a mix of approved/unapproved
---        entities.  I think what's going on is that I need to swap out not just the entity ids, but also the circuit
---        ids when swapping in the unapproved blueprint entities.  Not exactly sure how this makes a crash, but I bet
---        it's related.
---      [ ] Confirm/reproduce
---      [X] Fix
---    3. Incompatibility with Creative Mod
---      - Creative Mod apparently has some "instant blueprint cheat" feature that isn't working with this mod
---      - I'm guessing that the 'auto-approve' setting might serve as a workaround, but need to test it
---      [X] Confirm/reproduce
---      [ ] Fix
+--      [ ] Figure out a solution
+--      [ ] Implement solution
 
 local approvalBadges = require("control.approvalBadges")
 
