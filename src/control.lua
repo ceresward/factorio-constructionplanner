@@ -500,6 +500,22 @@ script.on_event(defines.events.on_pre_build,
   end
 )
 
+script.on_event(defines.events.script_raised_revive,
+function(event)
+  -- game.print("construction-planner: " .. event.name .. " for " .. entity_debug_string(event.entity))
+  -- Note: this bit of code is to check whenever a script raises a revive event, if the revived entity somehow got
+  --       placed on the unapproved ghost force by accident, and if so, resolve the issue by reassigning the entity to
+  --       the main player force.  This is to resolve a compatibility issue between this mod and the Creative Mod mod,
+  --       as well as potentially other mods too (the mod does have to use the raise_* flag however)
+    local entity = event.entity
+    local base_force_name = parse_base_force_name(entity.force.name)
+    if (entity.force.name ~= base_force_name) then
+      remove_placeholder_for(entity)
+      entity.force = base_force_name
+    end
+  end
+)
+
 -------------------------------------------------------------------------------
 --       REMOTE INTERFACES (comment out when not debugging)
 -------------------------------------------------------------------------------
