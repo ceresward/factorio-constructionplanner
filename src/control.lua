@@ -11,6 +11,38 @@
 --       mod, and hope that other mods don't mess around with the forces too much.  For /editor force changes during
 --       testing, I can use a console command + remote interface to manually force a badge rescan.
 
+--  TODO: investigate item-request-proxy and whether or not there might be any issues related to that
+--  TODO: resolve bugs
+--    1. Placeholder ghost deconstruction can be brought back via undo
+--      - There isn't a way to hook into undo events that I can tell.  I'll have to find another way.
+--      - Option A: remove the placeholder during on_pre_ghost_deconstructed and hope that effectively 'cancels' the deconstruction so it won't go on the undo queue
+--        - Big con here is that it will be confusing that undo doesn't work for unapproved decon when it would be expected that it does
+--      - Option B: roll with the undo (it should work anyways!), and find a way to remember and 'undo' the unapproved entities that pair with the placeholders
+--        - More complex, but it will be much more useful to the player
+--        - Can detect player deconstruction events using on_player_deconstructed_area and save a BlueprintEntities array of the unapproved entities in that area
+--        - Then use some sort of on_tick magic or similar to detect an 'undo event' for the same area, and restore the blueprint entities.
+--        - Note: According to JanSharp on Discord, the undo queue has a max length of 100, so I only have to save data on the 100 most recent deconstruction events
+--      - However I can probably use event on_pre_ghost_deconstructed to fix things, by approving the paired unapproved
+--       ghosts and/or removing the placeholder before the decon planner can act on it
+--      - Use LuaPreGhostDeconstructedEventFilter to make it more efficient
+--      [X] Confirm/reproduce
+--      [ ] Fix
+--    2. Game crash involving missing circuit_id somehow
+--      - I have doubts that I'll be able to reproduce this, but try anyways.  Might have to wait and see if the
+--        reporter can provide more info
+--      - Speculative guess:  something to do with circuit connections crossing approved/unapproved ghost boundaries?
+--      - Firmer guess:  it seems circuit connections get moved sometimes when blueprinting a mix of approved/unapproved
+--        entities.  I think what's going on is that I need to swap out not just the entity ids, but also the circuit
+--        ids when swapping in the unapproved blueprint entities.  Not exactly sure how this makes a crash, but I bet
+--        it's related.
+--      [ ] Confirm/reproduce
+--      [X] Fix
+--    3. Incompatibility with Creative Mod
+--      - Creative Mod apparently has some "instant blueprint cheat" feature that isn't working with this mod
+--      - I'm guessing that the 'auto-approve' setting might serve as a workaround, but need to test it
+--      [X] Confirm/reproduce
+--      [ ] Fix
+
 local approvalBadges = require("control.approvalBadges")
 
 local UINT32_MAX = 4294967295
@@ -51,16 +83,26 @@ function position_string(position)
   return result
 end
 
--- Maps a list of elements by some property of that element
-function reassociate(array, fnNewKey)
+-- Remap an associative array using a mapping function of form: (oldKey, oldVal) => (newKey, newVal)
+function remap(array, fnMap)
   local result = {}
-  for key, value in pairs(array or {}) do
-    local newKey = fnNewKey(key, value)
+  for oldKey, oldVal in pairs(array or {}) do
+    local newKey, newVal = fnMap(oldKey, oldVal)
     if newKey ~= nil then
-      result[newKey] = value
+      result[newKey] = newVal
     end
   end
   return result
+end
+
+-- Filter an associative array using a predicate function of form: (oldKey, oldVal) => isInclude
+function filter(array, fnPredicate)
+  return remap(array, function(oldKey, oldVal)
+    if fnPredicate(oldKey, oldVal) then
+      return oldKey, oldVal
+    end
+    return nil, nil
+  end)
 end
 
 DIPLOMACY_SYNC_IN_PROGRESS = false
@@ -342,41 +384,58 @@ script.on_event(defines.events.on_player_setup_blueprint,
 
     local adjust_blueprint = function(blueprint)
       local blueprintEntities = blueprint.get_blueprint_entities()
-      if not blueprintEntities then
-        return
-      end
+      if blueprintEntities and #blueprintEntities > 0 then
+        local placeholderEntities = filter(blueprintEntities, function(id, blueprintEntity)
+          return is_bp_placeholder(blueprintEntity)
+        end)
+        
+        if placeholderEntities and #placeholderEntities > 0 then
+          local force_name = to_unapproved_ghost_force_name(player.force.name)
+          local unapprovedEntities = get_unapproved_ghost_bp_entities(event.surface, force_name, event.area)
 
-      local placeholder_found = false
-      local adjustedBlueprintEntities = {}
-      local unapprovedBlueprintEntitiesMap = nil
-      for _, blueprintEntity in pairs(blueprintEntities) do
-        if is_bp_placeholder(blueprintEntity) then
-          placeholder_found = true
+          local unapprovedEntitiesByPosition = remap(unapprovedEntities, function(id, blueprintEntity)
+            return position_string(blueprintEntity.position), blueprintEntity
+          end)
 
-          if not unapprovedBlueprintEntitiesMap then
-            local force_name = to_unapproved_ghost_force_name(player.force.name)
-            local unapprovedBlueprintEntities = get_unapproved_ghost_bp_entities(event.surface, force_name, event.area)
-            unapprovedBlueprintEntitiesMap = reassociate(unapprovedBlueprintEntities,
-              function(_, blueprintEntity)
-                return position_string(blueprintEntity.position)
+          local replacementEntities = remap(placeholderEntities, function(id, placeholderEntity)
+            local replacementEntity = unapprovedEntitiesByPosition[position_string(placeholderEntity.position)]
+            if replacementEntity then
+              replacementEntity.entity_number = placeholderEntity.entity_number
+              return id, replacementEntity
+            else
+              return id, nil
+            end
+          end)
+
+          -- Fix up the circuit connections
+          -- game.print("Fixing up circuit connections on " .. tostring(#replacementEntities) .. " replacement entities")
+          for id, replacementEntity in pairs(replacementEntities) do
+            if replacementEntity.connections then
+              for _, connection in pairs(replacementEntity.connections) do
+                for color, connectedEntityRefs in pairs(connection) do
+                  for _, connectedEntityRef in pairs(connectedEntityRefs) do
+                    local replacement_id = unapprovedEntities[connectedEntityRef.entity_id].entity_number
+                    connectedEntityRef.entity_id = replacement_id
+                  end
+                end
               end
-            )
+            end
           end
 
-          local replacement = unapprovedBlueprintEntitiesMap[position_string(blueprintEntity.position)]
-          if replacement then
-            replacement.entity_number = blueprintEntity.entity_number
-            table.insert(adjustedBlueprintEntities, replacement)
+          -- Apply the replacement entities
+          for id, replacementEntity in pairs(replacementEntities) do
+            blueprintEntities[id] = replacementEntity
           end
-        else
-          table.insert(adjustedBlueprintEntities, blueprintEntity)
+
+          -- Uncomment for debugging only
+          -- game.print("Blueprint updated to replace placeholders")
+          -- for id, blueprintEntity in pairs(blueprintEntities) do
+          --   game.print("blueprintEntities[" .. id .. "] = " .. serpent.line(blueprintEntity))
+          -- end
+
+          blueprint.clear_blueprint()
+          blueprint.set_blueprint_entities(blueprintEntities)
         end
-      end
-
-      if placeholder_found then 
-        -- game.print("Placeholders detected; adjusting blueprint")
-        blueprint.clear_blueprint()
-        blueprint.set_blueprint_entities(adjustedBlueprintEntities)
       end
     end
     
