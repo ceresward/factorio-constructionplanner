@@ -1,4 +1,10 @@
 ---------------------------------------------------------------------------------------------------
+Version: 1.0.5
+Date: 17. 10. 2021
+  Features:
+    - Construction planner tool now has a hotkey (default Alt + C)
+    - Auto-approval mod setting now has a toolbar shortcut and a hotkey (default Shift + Alt + C)
+---------------------------------------------------------------------------------------------------
 Version: 1.0.4
 Date: 09. 10. 2021
   Bugfixes:
