@@ -1,9 +1,8 @@
 -- Ideas for future enhancement:
   -- Use "on_entity_changed_force", if Wube decides to add it
   -- Forces library?
-  -- More efficient force-based logic?  (regex = slow)
-  -- Mod preferences...ideas:
-    -- Whether entities should start out approved or unapproved when first built (default unapproved)
+  -- More efficient force identification logic?  (regex = slow)
+  -- Ideas for additional mod settings:
     -- Allow building of unapproved entities when there are no remaining approved entities to build (within a given logistic network?)
     -- Allow building of unapproved entities of a given type if there are enough spare resources of that type + available construction bots (within a given logistic network)
 
@@ -33,6 +32,7 @@ local approvalBadges = require("control.approvalBadges")
 
 local UINT32_MAX = 4294967295
 local FORCE_REGEX = "(.+)%.unapproved_ghosts"
+local SETTING_AUTO_APPROVE = "constructionPlanner-auto-approve"
 
 function is_unapproved_ghost_force_name(force_name)
   return string.match(force_name, FORCE_REGEX) ~= nil
@@ -204,7 +204,13 @@ function remove_unapproved_ghost_for(placeholder)
 end
 
 function is_auto_approve(player)
-  return settings.get_player_settings(player)["constructionPlanner-auto-approve"].value
+  return settings.get_player_settings(player)[SETTING_AUTO_APPROVE].value
+end
+
+function toggle_auto_approve(player)
+  local modSetting = settings.get_player_settings(player)[SETTING_AUTO_APPROVE]
+  modSetting.value = not modSetting.value
+  settings.get_player_settings(player)[SETTING_AUTO_APPROVE] = modSetting
 end
 
 function is_approvable_ghost(entity)
@@ -487,17 +493,41 @@ script.on_event(defines.events.on_pre_build,
 )
 
 script.on_event(defines.events.script_raised_revive,
-function(event)
-  -- game.print("construction-planner: " .. event.name .. " for " .. entity_debug_string(event.entity))
-  -- Note: this bit of code is to check whenever a script raises a revive event, if the revived entity somehow got
-  --       placed on the unapproved ghost force by accident, and if so, resolve the issue by reassigning the entity to
-  --       the main player force.  This is to resolve a compatibility issue between this mod and the Creative Mod mod,
-  --       as well as potentially other mods too (the mod does have to use the raise_* flag however)
+  function(event)
+    -- game.print("construction-planner: " .. event.name .. " for " .. entity_debug_string(event.entity))
+    -- Note: this bit of code is to check whenever a script raises a revive event, if the revived entity somehow got
+    --       placed on the unapproved ghost force by accident, and if so, resolve the issue by reassigning the entity to
+    --       the main player force.  This is to resolve a compatibility issue between this mod and the Creative Mod mod,
+    --       as well as potentially other mods too (the mod does have to use the raise_* flag however)
     local entity = event.entity
     local base_force_name = parse_base_force_name(entity.force.name)
     if (entity.force.name ~= base_force_name) then
       remove_placeholder_for(entity)
       entity.force = base_force_name
+    end
+  end
+)
+
+script.on_event("toggle-auto-approve",
+  function(event)
+    -- game.print("construction-planner: " .. event.input_name .. " (customInput)")
+    toggle_auto_approve(event.player_index)
+  end
+)
+script.on_event(defines.events.on_lua_shortcut,
+  function(event)
+    if (event.prototype_name == "toggle-auto-approve") then
+      -- game.print("construction-planner: " .. event.prototype_name .. " (shortcut)")
+      toggle_auto_approve(event.player_index)
+    end
+  end
+)
+script.on_event(defines.events.on_runtime_mod_setting_changed,
+  function(event)
+    -- game.print("construction-planner: " .. event.name .. " for " .. event.setting)
+    if (event.setting == SETTING_AUTO_APPROVE) then
+      local player = game.get_player(event.player_index)
+      player.set_shortcut_toggled("toggle-auto-approve", is_auto_approve(player))
     end
   end
 )

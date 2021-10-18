@@ -36,19 +36,30 @@ local constructionPlanner = {
     -- alt_tile_filters = {"out-of-map"}, -- forces tiles to never be included in the selection
 }
 
-local giveConstructionPlanner = {
+local giveConstructionPlannerInput = {
+    type = "custom-input",
+    name = "give-construction-planner",
+    localised_name = nil, -- Defined in locale cfg files
+    localised_description = nil, -- Defined in locale cfg files
+    key_sequence = "ALT + C",
+    action = "spawn-item",
+    item_to_spawn = "construction-planner",
+}
+
+local giveConstructionPlannerShortcut = {
     type = "shortcut",
     name = "give-construction-planner",
     order = "b[blueprints]-g[construction-planner]",
-    action = "spawn-item",
-    localised_name = nil,
-    associated_control_input = "give-construction-planner",
+    localised_name = nil, -- Defined in locale cfg files
+    localised_description = nil, -- Defined in locale cfg files
+    associated_control_input = giveConstructionPlannerInput.name,
+    action = giveConstructionPlannerInput.action,
+    item_to_spawn = giveConstructionPlannerInput.item_to_spawn,
     -- Note: the tech unlock is disabled until further notice, until I figure out if it's possible to detect when the
     --       shortcut isn't yet available (I don't want to auto-unapprove ghosts if the selection-tool isn't yet
     --       unlocked).  It might look a little weird for that one shortcut to appear right from the start, but it's
     --       not too likely to matter...most players will have unlocked BP tech well before exploring mods
     -- technology_to_unlock = "construction-robotics",
-    item_to_spawn = "construction-planner",
     style = "green",
     icon = {
         filename = "__ConstructionPlanner__/graphics/icons/shortcut-toolbar/mip/new-construction-planner-x32-white.png",
@@ -68,6 +79,56 @@ local giveConstructionPlanner = {
     },
     disabled_small_icon = {
         filename = "__ConstructionPlanner__/graphics/icons/shortcut-toolbar/mip/new-construction-planner-x24-white.png",
+        priority = "extra-high-no-scale",
+        size = 24,
+        scale = 0.5,
+        mipmap_count = 2,
+        flags = {"gui-icon"}
+    }
+}
+
+local toggleAutoApproveInput = {
+    type = "custom-input",
+    name = "toggle-auto-approve",
+    localised_name = nil, -- Defined in locale cfg files
+    localised_description = nil, -- Defined in locale cfg files
+    key_sequence = "SHIFT + ALT + C",
+    action = "lua",
+}
+
+local toggleAutoApproveShortcut = {
+    type = "shortcut",
+    name = "toggle-auto-approve",
+    order = "a[auto-approve]",
+    localised_name = nil, -- Defined in locale cfg files
+    localised_description = nil, -- Defined in locale cfg files
+    action = toggleAutoApproveInput.action,
+    associated_control_input = toggleAutoApproveInput.name,
+    -- Note: the tech unlock is disabled until further notice, until I figure out if it's possible to detect when the
+    --       shortcut isn't yet available (I don't want to auto-unapprove ghosts if the selection-tool isn't yet
+    --       unlocked).  It might look a little weird for that one shortcut to appear right from the start, but it's
+    --       not too likely to matter...most players will have unlocked BP tech well before exploring mods
+    -- technology_to_unlock = "construction-robotics",
+    style = "default",
+    toggleable = true,
+    icon = {
+        filename = "__ConstructionPlanner__/graphics/icons/shortcut-toolbar/mip/auto-approve-x32.png",
+        priority = "extra-high-no-scale",
+        size = 32,
+        scale = 0.5,
+        mipmap_count = 2,
+        flags = {"gui-icon"}
+    },
+    small_icon = {
+        filename = "__ConstructionPlanner__/graphics/icons/shortcut-toolbar/mip/auto-approve-x24.png",
+        priority = "extra-high-no-scale",
+        size = 24,
+        scale = 0.5,
+        mipmap_count = 2,
+        flags = {"gui-icon"}
+    },
+    disabled_small_icon = {
+        filename = "__ConstructionPlanner__/graphics/icons/shortcut-toolbar/mip/auto-approve-x24-white.png",
         priority = "extra-high-no-scale",
         size = 24,
         scale = 0.5,
@@ -121,7 +182,9 @@ unapproved_ghost_placeholder_item.icons = {
 
 
 data:extend{
-    constructionPlanner, giveConstructionPlanner,
+    constructionPlanner,
+    giveConstructionPlannerInput, giveConstructionPlannerShortcut,
+    toggleAutoApproveInput, toggleAutoApproveShortcut,
     unapproved_item_group, unapproved_item_subgroup,
     unapproved_ghost_placeholder, unapproved_ghost_placeholder_item
 }

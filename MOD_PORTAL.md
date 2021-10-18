@@ -10,6 +10,8 @@ Why use Construction Planner?
 - Plan out an entire perimeter defense, without worrying about the bots getting ahead of you.  Then, strategically prioritize construction of the defenses in key locations first.
 - Stamp out a huge solar field and approve it in chunks, so the bots won't accidentally build solar panels and accumulators where there's no power yet
 
+You can also see the mod in action by checking out Xterminator's excellent [mod spotlight video](https://www.youtube.com/watch?v=UNAXhiTBu9M) on Youtube.
+
 ## Features
 
 - Ghost entities are no longer built automatically by construction bots; instead, they must first be approved by the player
