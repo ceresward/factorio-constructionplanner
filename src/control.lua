@@ -27,6 +27,13 @@
 --      [X] Confirm/reproduce
 --      [ ] Figure out a solution
 --      [ ] Implement solution
+--    2. Shift-stamping over an existing placeholder causes that ghost to become approved
+--      - I think this might be related to the safety check I added to approve orphaned unapproved ghosts.  The theory is that the
+--        shift-stamp removes the placeholder, but not the unapproved ghost, so the orphan check ends up approving the ghost when it
+--        shouldn't have been.  But I'm not 100% convinced on the theory, there could be something else going on instead.
+--    3. Stamping w/o shift gives a message 'Placeholder is in the way'
+--      - Actually this is probably correct, but I should confirm how it works w/ approved/regular ghosts and ensure unapproved works the
+--        same way
 
 local approvalBadges = require("control.approvalBadges")
 
