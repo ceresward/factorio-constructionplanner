@@ -1,3 +1,11 @@
+# Notice: Factorio 2.0 Plans
+
+Some of you may be wondering, what will happen with this mod when Factorio 2.0 and the Space Age DLC are released?  The short answer is - this mod will be updated as soon as possible to support Factorio 2.0 and Space Age.
+
+This mod may prove even more useful in Space Age than it already is in the base game; in Space Age we will be more reliant on construction bots than ever before, due to the need to remotely manage multiple planets and space platforms simultaneously.  And even in the base game, construction bots will be more useful, due to the changes made to allow nearly every action to be performed from Remote View ([FFF_380](https://www.factorio.com/blog/post/fff-380)).
+
+I also have some ideas for improving how the mod works that could potentially overcome some of the current mod limitations, however the first priority will be updating the mod to work with Factorio 2.0.
+
 # Description
 
 Construction Planner changes the behavior of how ghost entities are built to give the player more control over planning and building their factory.  With the mod, construction bots will no longer be automatically dispatched to build ghosts; instead, the player must use the new Construction Planner selection tool to approve construction of the ghosts; only then will bots be dispatched.

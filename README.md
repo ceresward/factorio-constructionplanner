@@ -19,15 +19,22 @@ Additional information about mod features and limitations can be found on the [F
 
 ## Roadmap
 
-### 1.1
-- [ ] Support for entity filters when using the approval tool (similar to the deconstruction planner)
-- [ ] Toggle switch to allow/disallow building of unapproved ghosts if there are no approved ghosts left to build
+### 2.0
+
+- [ ] Update mod to work with Factorio 2.0 and Space Age
+
+### 2.1
+- [ ] Add filtering GUI to the approval tool (similar to deconstruction planner filtering)
+- [ ] Add option to allow unapproved ghosts to be built if there are no approved ghosts left to build
+- [ ] Experiment with new method for preventing bots from building unapproved ghosts that might help work around some of the mod limitations
+  - Current method: unapproved ghosts are transferred to a separate force to prevent bots from attempting to build them
+  - New method: create "unapproved" variants of all buildable prototypes and swap out real entity ghosts for the unapproved variant as needed.  Example:  "Assembler" ghost gets swapped by the mod to "Assembler (Unapproved)" ghost
 
 ### Unscheduled
 - [ ] Option to require approval for tile ghosts as well
-- [ ] Support use of the upgrade planner on unapproved ghosts
+- [ ] Add support for upgrading unapproved ghosts using an upgrade planner
 - [ ] Improved graphics and icons
-- [ ] Undo support (if the mod API allows for it)
+- [ ] Add Undo/Redo support (if the mod API allows for it)
 - [ ] Improve visual appearance when selecting unapproved ghosts using the blueprint and deconstruction tools (if the mod API allows for it)
 
 ## How It Works
