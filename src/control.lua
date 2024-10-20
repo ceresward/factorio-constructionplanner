@@ -190,7 +190,7 @@ local function remove_unapproved_ghost_for(placeholder)
 end
 
 local function is_auto_approve(player)
-  return settings.get_player_settings(player)[SETTING_AUTO_APPROVE].value
+  return settings.get_player_settings(player)[SETTING_AUTO_APPROVE].value == true
 end
 
 local function toggle_auto_approve(player)
@@ -286,6 +286,7 @@ script.on_event(defines.events.on_player_selected_area,
   function(event)
     if event.item == 'construction-planner' then
       local player = game.get_player(event.player_index)
+      if player == nil then return end
 
       -- Filter should only match 'unapproved' ghosts (ghost entities on the selecting player's unapproved ghost force)
       local entities = event.surface.find_entities_filtered {
@@ -310,6 +311,7 @@ script.on_event(defines.events.on_player_alt_selected_area,
   function(event)
     if event.item == 'construction-planner' then
         local player = game.get_player(event.player_index)
+        if player == nil then return end
 
         -- Filter should only match 'approved' ghosts (ghost entities on the selecting player's base force)
         local entities = event.surface.find_entities_filtered {
@@ -513,6 +515,7 @@ script.on_event(defines.events.on_runtime_mod_setting_changed,
     -- game.print("construction-planner: " .. event.name .. " for " .. event.setting)
     if (event.setting == SETTING_AUTO_APPROVE) then
       local player = game.get_player(event.player_index)
+      if player == nil then return end
       player.set_shortcut_toggled("toggle-auto-approve", is_auto_approve(player))
     end
   end
