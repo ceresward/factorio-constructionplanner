@@ -1,16 +1,19 @@
-local approvalBadges = {}
-
-local badgeScale = 2
-
 -- TODO: consider replacing 'draw_text' with 'draw_sprite' and a better icon? (maybe Unicode hammer or hammer-and-wrench?)
 -- Unicode marks, for convenience:
 --   Useable:  ✘ ✔
 --   Not useable:  🛠
 
 -----------------------------------------------------------
---  Public functions
+--  Internal implementation
 -----------------------------------------------------------
 
+local badgeScale = 2
+
+-----------------------------------------------------------
+-- External API
+-----------------------------------------------------------
+
+local approvalBadges = {}
 function approvalBadges.getOrCreate(entity)
   if not global.approvalBadges then
     global.approvalBadges = {}
@@ -55,13 +58,5 @@ function approvalBadges.hide(badgeId)
     rendering.set_visible(badgeId, false)
   end
 end
-
------------------------------------------------------------
---  Private functions
------------------------------------------------------------
-
-
-
------------------------------------------------------------
 
 return approvalBadges

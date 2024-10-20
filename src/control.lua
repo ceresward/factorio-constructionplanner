@@ -41,15 +41,15 @@ local UINT32_MAX = 4294967295
 local FORCE_REGEX = "(.+)%.unapproved_ghosts"
 local SETTING_AUTO_APPROVE = "constructionPlanner-auto-approve"
 
-function is_unapproved_ghost_force_name(force_name)
+local function is_unapproved_ghost_force_name(force_name)
   return string.match(force_name, FORCE_REGEX) ~= nil
 end
 
-function to_unapproved_ghost_force_name(base_force_name)
+local function to_unapproved_ghost_force_name(base_force_name)
   return base_force_name .. ".unapproved_ghosts"
 end
 
-function parse_base_force_name(force_name)
+local function parse_base_force_name(force_name)
   local base_name = string.match(force_name, FORCE_REGEX)
   if base_name then
       return base_name
@@ -58,26 +58,18 @@ function parse_base_force_name(force_name)
   end
 end
 
-function entity_debug_string(entity)
-  return entity.type .. " of " .. entity.force.name .. " @ " .. serpent.line(entity.position)
-end
+-- local function entity_debug_string(entity)
+--   return entity.type .. " of " .. entity.force.name .. " @ " .. serpent.line(entity.position)
+-- end
 
-function first_match_or_nil(table)
-  if table_size(table) == 0 then
-    return nil
-  else 
-    return table[1]
-  end
-end
-
-function position_string(position)
+local function position_string(position)
   local result = tostring(position.x) .. ":" .. tostring(position.y)
   -- game.print("Position string: " .. serpent.line(position) .. " --> " .. result)
   return result
 end
 
 -- Remap an associative array using a mapping function of form: (oldKey, oldVal) => (newKey, newVal)
-function remap(array, fnMap)
+local function remap(array, fnMap)
   local result = {}
   for oldKey, oldVal in pairs(array or {}) do
     local newKey, newVal = fnMap(oldKey, oldVal)
@@ -89,7 +81,7 @@ function remap(array, fnMap)
 end
 
 -- Filter an associative array using a predicate function of form: (oldKey, oldVal) => isInclude
-function filter(array, fnPredicate)
+local function filter(array, fnPredicate)
   return remap(array, function(oldKey, oldVal)
     if fnPredicate(oldKey, oldVal) then
       return oldKey, oldVal
@@ -98,8 +90,8 @@ function filter(array, fnPredicate)
   end)
 end
 
-DIPLOMACY_SYNC_IN_PROGRESS = false
-function syncAllDiplomacy(srcForce, destForce)
+local DIPLOMACY_SYNC_IN_PROGRESS = false
+local function syncAllDiplomacy(srcForce, destForce)
   -- game.print("Starting diplomacy sync from " .. srcForce.name .. " to " .. destForce.name .. "...")
   DIPLOMACY_SYNC_IN_PROGRESS = true
   for _, force in pairs(game.forces) do
@@ -112,8 +104,8 @@ function syncAllDiplomacy(srcForce, destForce)
   -- game.print("Diplomacy sync complete")
 end
 
-FORCE_CREATION_IN_PROGRESS = false
-function get_or_create_unapproved_ghost_force(base_force)
+local FORCE_CREATION_IN_PROGRESS = false
+local function get_or_create_unapproved_ghost_force(base_force)
   local unapproved_ghost_force_name = to_unapproved_ghost_force_name(base_force.name)
   if not game.forces[unapproved_ghost_force_name] then
     FORCE_CREATION_IN_PROGRESS = true
@@ -128,7 +120,7 @@ function get_or_create_unapproved_ghost_force(base_force)
   return game.forces[unapproved_ghost_force_name]
 end
 
-function get_script_blueprint()
+local function get_script_blueprint()
   if not global.blueprintInventory then
     local blueprintInventory = game.create_inventory(1)
     blueprintInventory.insert({ name="blueprint"})
@@ -137,28 +129,15 @@ function get_script_blueprint()
   return global.blueprintInventory[1]
 end
 
-function to_blueprint_entity(entity)
-  local bp = get_script_blueprint()
-  bp.clear_blueprint()
-  bp.create_blueprint {
-    surface = entity.surface,
-    force = entity.force,
-    area = {{entity.position.x, entity.position.y}, {entity.position.x, entity.position.y}},
-    always_include_tiles = false
-  }
-  -- game.print("to_blueprint_entity: BlueprintEntity = " .. serpent.line(bp.get_blueprint_entities()))
-  return first_match_or_nil(bp.get_blueprint_entities())
-end
-
-function is_placeholder(entity)
+local function is_placeholder(entity)
   return entity.type == "entity-ghost" and entity.ghost_name == "unapproved-ghost-placeholder"
 end
 
-function is_bp_placeholder(entity)
+local function is_bp_placeholder(entity)
   return entity.name == "unapproved-ghost-placeholder"
 end
 
-function create_placeholder_for(unapproved_entity)
+local function create_placeholder_for(unapproved_entity)
   -- Note: the placeholder has to be a ghost, otherwise it will overwrite the unapproved entity, and mess up the deconstruction planner interaction
   local placeholder = unapproved_entity.surface.create_entity {
     name = "entity-ghost",
@@ -171,7 +150,7 @@ function create_placeholder_for(unapproved_entity)
   return placeholder
 end
 
-function remove_placeholder_for(unapproved_entity)
+local function remove_placeholder_for(unapproved_entity)
   -- Note: this search works only because the placeholder will be at the *same exact position* as the unapproved entity
   local placeholders = unapproved_entity.surface.find_entities_filtered {
     position = unapproved_entity.position,
@@ -185,7 +164,7 @@ function remove_placeholder_for(unapproved_entity)
   end
 end
 
-function get_unapproved_ghost_bp_entities(surface, force, area)
+local function get_unapproved_ghost_bp_entities(surface, force, area)
   local bp = get_script_blueprint()
   bp.clear_blueprint()
   bp.create_blueprint {
@@ -197,7 +176,7 @@ function get_unapproved_ghost_bp_entities(surface, force, area)
   return bp.get_blueprint_entities()
 end
 
-function remove_unapproved_ghost_for(placeholder)
+local function remove_unapproved_ghost_for(placeholder)
   local unapproved_ghosts = placeholder.surface.find_entities_filtered {
     position = placeholder.position,
     force = to_unapproved_ghost_force_name(placeholder.force.name),
@@ -210,18 +189,18 @@ function remove_unapproved_ghost_for(placeholder)
   end
 end
 
-function is_auto_approve(player)
+local function is_auto_approve(player)
   return settings.get_player_settings(player)[SETTING_AUTO_APPROVE].value
 end
 
-function toggle_auto_approve(player)
+local function toggle_auto_approve(player)
   local modSetting = settings.get_player_settings(player)[SETTING_AUTO_APPROVE]
   modSetting.value = not modSetting.value
   settings.get_player_settings(player)[SETTING_AUTO_APPROVE] = modSetting
 end
 
-function is_approvable_ghost(entity)
-  function is_perishable(entity)
+local function is_approvable_ghost(entity)
+  local function is_perishable(entity)
     -- In theory, entity.time_to_live <= entity.force.ghost_time_to_live would also work..but this seems safer
     return entity.time_to_live < UINT32_MAX
   end
@@ -229,7 +208,7 @@ function is_approvable_ghost(entity)
   return entity and entity.type == "entity-ghost" and not is_placeholder(entity) and not is_perishable(entity)
 end
 
-function approve_entities(entities)
+local function approve_entities(entities)
   local baseForceCache = {}
 
   for _, entity in pairs(entities) do
@@ -250,7 +229,7 @@ function approve_entities(entities)
   end
 end
 
-function unapprove_entities(entities)
+local function unapprove_entities(entities)
   local unapprovedForceCache = {}
 
   for _, entity in pairs(entities) do
