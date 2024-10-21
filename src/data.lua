@@ -50,7 +50,7 @@ local giveConstructionPlannerInput = {
     name = "give-construction-planner",
     localised_name = nil, -- Defined in locale cfg files
     localised_description = nil, -- Defined in locale cfg files
-    key_sequence = "ALT + C",
+    key_sequence = "ALT + N",
     action = "spawn-item",
     item_to_spawn = "construction-planner",
 }
@@ -81,7 +81,7 @@ local toggleAutoApproveInput = {
     name = "toggle-auto-approve",
     localised_name = nil, -- Defined in locale cfg files
     localised_description = nil, -- Defined in locale cfg files
-    key_sequence = "SHIFT + ALT + C",
+    key_sequence = "SHIFT + ALT + N",
     action = "lua",
 }
 
