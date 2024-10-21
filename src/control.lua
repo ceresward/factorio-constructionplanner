@@ -121,12 +121,12 @@ local function get_or_create_unapproved_ghost_force(base_force)
 end
 
 local function get_script_blueprint()
-  if not global.blueprintInventory then
+  if not storage.blueprintInventory then
     local blueprintInventory = game.create_inventory(1)
     blueprintInventory.insert({ name="blueprint"})
-    global.blueprintInventory = blueprintInventory
+    storage.blueprintInventory = blueprintInventory
   end
-  return global.blueprintInventory[1]
+  return storage.blueprintInventory[1]
 end
 
 local function is_placeholder(entity)
@@ -200,12 +200,7 @@ local function toggle_auto_approve(player)
 end
 
 local function is_approvable_ghost(entity)
-  local function is_perishable(entity)
-    -- In theory, entity.time_to_live <= entity.force.ghost_time_to_live would also work..but this seems safer
-    return entity.time_to_live < UINT32_MAX
-  end
-
-  return entity and entity.type == "entity-ghost" and not is_placeholder(entity) and not is_perishable(entity)
+  return entity and entity.type == "entity-ghost" and not is_placeholder(entity)
 end
 
 local function approve_entities(entities)
@@ -299,9 +294,6 @@ script.on_event(defines.events.on_player_selected_area,
         -- game.print("construction-planner: approving "..tostring(#entities).." entities")
 
         approve_entities(entities)
-
-        -- Note:  if the devs ever add support, I can also use "utility/upgrade_selection_started" at selection start
-        player.play_sound { path = "utility/upgrade_selection_ended" }
       end
     end
   end
@@ -324,9 +316,6 @@ script.on_event(defines.events.on_player_alt_selected_area,
           -- game.print("construction-planner: unapproving "..tostring(#entities).." entities")
 
           unapprove_entities(entities)
-
-          -- Note:  if the devs ever add support, I can also use "utility/upgrade_selection_started" at selection start
-          player.play_sound { path = "utility/upgrade_selection_ended" }
         end
     end
   end
@@ -339,9 +328,9 @@ script.on_event(defines.events.on_built_entity,
     
     local player = game.players[event.player_index]
     if not is_auto_approve(player) then
-      unapprove_entities({event.created_entity})
+      unapprove_entities({event.entity})
     else
-      approve_entities({event.created_entity})
+      approve_entities({event.entity})
     end
 
     -- TODO: ask on the forums if is_shortcut_available can be made available for all mod-defined shortcuts
