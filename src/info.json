@@ -1,11 +1,11 @@
 {
     "name": "ConstructionPlanner",
-    "version": "1.0.5",
+    "version": "2.0.0",
     "title": "Construction Planner",
     "author": "ceresward",
     "contact": "https://reddit.com/u/ceresward",
     "homepage": "https://github.com/ceresward/factorio-constructionplanner",
-    "factorio_version": "1.1",
-    "dependencies": ["base >= 1.1"],
-    "description": "Ghosts must now be 'approved' by the player before construction bots will be dispatched.  This gives the player improved control over what parts of the factory get built, and when."
+    "factorio_version": "2.0",
+    "dependencies": ["base >= 2.0"],
+    "description": "Construction bots will wait for the player to 'approve' construction of ghost entities before dispatching, giving the player improved control over what parts of the factory get built, and when."
 }
