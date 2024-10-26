@@ -35,90 +35,11 @@
 --      - Actually this is probably correct, but I should confirm how it works w/ approved/regular ghosts and ensure unapproved works the
 --        same way
 
+local modutil = require("control.modutil")
 local approvalBadges = require("control.approvalBadges")
+local forces = require("control.forces")
 
-local UINT32_MAX = 4294967295
-local FORCE_REGEX = "(.+)%.unapproved_ghosts"
 local SETTING_AUTO_APPROVE = "constructionPlanner-auto-approve"
-
-local function is_unapproved_ghost_force_name(force_name)
-  return string.match(force_name, FORCE_REGEX) ~= nil
-end
-
-local function to_unapproved_ghost_force_name(base_force_name)
-  return base_force_name .. ".unapproved_ghosts"
-end
-
-local function parse_base_force_name(force_name)
-  local base_name = string.match(force_name, FORCE_REGEX)
-  if base_name then
-      return base_name
-  else
-      return force_name
-  end
-end
-
--- local function entity_debug_string(entity)
---   return entity.type .. " of " .. entity.force.name .. " @ " .. serpent.line(entity.position)
--- end
-
-local function position_string(position)
-  local result = tostring(position.x) .. ":" .. tostring(position.y)
-  -- game.print("Position string: " .. serpent.line(position) .. " --> " .. result)
-  return result
-end
-
--- Remap an associative array using a mapping function of form: (oldKey, oldVal) => (newKey, newVal)
-local function remap(array, fnMap)
-  local result = {}
-  for oldKey, oldVal in pairs(array or {}) do
-    local newKey, newVal = fnMap(oldKey, oldVal)
-    if newKey ~= nil then
-      result[newKey] = newVal
-    end
-  end
-  return result
-end
-
--- Filter an associative array using a predicate function of form: (oldKey, oldVal) => isInclude
-local function filter(array, fnPredicate)
-  return remap(array, function(oldKey, oldVal)
-    if fnPredicate(oldKey, oldVal) then
-      return oldKey, oldVal
-    end
-    return nil, nil
-  end)
-end
-
-local DIPLOMACY_SYNC_IN_PROGRESS = false
-local function syncAllDiplomacy(srcForce, destForce)
-  -- game.print("Starting diplomacy sync from " .. srcForce.name .. " to " .. destForce.name .. "...")
-  DIPLOMACY_SYNC_IN_PROGRESS = true
-  for _, force in pairs(game.forces) do
-    if (force ~= srcForce and force ~= destForce) then
-      destForce.set_friend(force, srcForce.get_friend(force))
-      destForce.set_cease_fire(force, srcForce.get_cease_fire(force))
-    end
-  end
-  DIPLOMACY_SYNC_IN_PROGRESS = false
-  -- game.print("Diplomacy sync complete")
-end
-
-local FORCE_CREATION_IN_PROGRESS = false
-local function get_or_create_unapproved_ghost_force(base_force)
-  local unapproved_ghost_force_name = to_unapproved_ghost_force_name(base_force.name)
-  if not game.forces[unapproved_ghost_force_name] then
-    FORCE_CREATION_IN_PROGRESS = true
-    local unapproved_ghost_force = game.create_force(unapproved_ghost_force_name)
-    unapproved_ghost_force.set_friend(base_force, true)
-    unapproved_ghost_force.set_cease_fire(base_force, true)
-    base_force.set_friend(unapproved_ghost_force, true)
-    base_force.set_cease_fire(unapproved_ghost_force, true)
-    syncAllDiplomacy(base_force, unapproved_ghost_force)
-    FORCE_CREATION_IN_PROGRESS = false
-  end
-  return game.forces[unapproved_ghost_force_name]
-end
 
 local function get_script_blueprint()
   if not storage.blueprintInventory then
@@ -142,7 +63,7 @@ local function create_placeholder_for(unapproved_entity)
   local placeholder = unapproved_entity.surface.create_entity {
     name = "entity-ghost",
     position = unapproved_entity.position,
-    force = parse_base_force_name(unapproved_entity.force.name),
+    force = forces.parse_base_force_name(unapproved_entity.force.name),
     inner_name = "unapproved-ghost-placeholder"
   }
   -- game.print("Unapproved entity: " .. entity_debug_string(event.created_entity))
@@ -154,7 +75,7 @@ local function remove_placeholder_for(unapproved_entity)
   -- Note: this search works only because the placeholder will be at the *same exact position* as the unapproved entity
   local placeholders = unapproved_entity.surface.find_entities_filtered {
     position = unapproved_entity.position,
-    force = parse_base_force_name(unapproved_entity.force.name),
+    force = forces.parse_base_force_name(unapproved_entity.force.name),
     ghost_name = "unapproved-ghost-placeholder"
   }
 
@@ -179,7 +100,7 @@ end
 local function remove_unapproved_ghost_for(placeholder)
   local unapproved_ghosts = placeholder.surface.find_entities_filtered {
     position = placeholder.position,
-    force = to_unapproved_ghost_force_name(placeholder.force.name),
+    force = forces.get_unapproved_force_name(placeholder.force.name),
     name = "entity-ghost"
   }
 
@@ -210,7 +131,7 @@ local function approve_entities(entities)
     if is_approvable_ghost(entity) then
       local base_force = baseForceCache[entity.force.name]
       if not base_force then
-        local base_force_name = parse_base_force_name(entity.force.name)
+        local base_force_name = forces.parse_base_force_name(entity.force.name)
         base_force = game.forces[base_force_name]
         baseForceCache[entity.force.name] = base_force
       end
@@ -224,15 +145,16 @@ local function approve_entities(entities)
   end
 end
 
+---@param entities LuaEntity[]
 local function unapprove_entities(entities)
   local unapprovedForceCache = {}
 
   for _, entity in pairs(entities) do
     if is_approvable_ghost(entity) then
-      if not is_unapproved_ghost_force_name(entity.force.name) then
+      if not forces.is_unapproved_force(entity.force--[[@as LuaForce]]) then
         local unapproved_force = unapprovedForceCache[entity.force.name]
         if not unapproved_force then
-          unapproved_force = get_or_create_unapproved_ghost_force(entity.force)
+          unapproved_force = forces.get_or_create_unapproved_force(entity.force)
           unapprovedForceCache[entity.force.name] = unapproved_force
         end
         if (entity.force ~= unapproved_force) then
@@ -251,31 +173,9 @@ end
 --       EVENTS
 -------------------------------------------------------------------------------
 
-script.on_event(defines.events.on_force_friends_changed,
-  function(event)
-    if not DIPLOMACY_SYNC_IN_PROGRESS and not FORCE_CREATION_IN_PROGRESS then 
-      local unapproved_ghost_force = game.forces[to_unapproved_ghost_force_name(event.force.name)]
-      if unapproved_ghost_force ~= nil then
-        -- game.print("Syncing friends update from " .. event.force.name .. " to " .. unapproved_ghost_force.name)
-        -- game.print("  (other force = " .. event.other_force.name .. ", added = " .. tostring(event.added) .. ")")
-        unapproved_ghost_force.set_friend(event.other_force, event.added)
-      end
-    end
-  end
-)
-
-script.on_event(defines.events.on_force_cease_fire_changed,
-  function(event)
-    if not DIPLOMACY_SYNC_IN_PROGRESS and not FORCE_CREATION_IN_PROGRESS then 
-      local unapproved_ghost_force = game.forces[to_unapproved_ghost_force_name(event.force.name)]
-      if unapproved_ghost_force ~= nil then
-        -- game.print("Syncing cease-fire update from " .. event.force.name .. " to " .. unapproved_ghost_force.name)
-        -- game.print("  (other force = " .. event.other_force.name .. ", added = " .. tostring(event.added) .. ")")
-        unapproved_ghost_force.set_cease_fire(event.other_force, event.added)
-      end
-    end
-  end
-)
+-- Apply events from forces module intended to keep diplomacy in sync
+script.on_event(defines.events.on_force_friends_changed, forces.on_force_friends_changed)
+script.on_event(defines.events.on_force_cease_fire_changed, forces.on_force_cease_fire_changed)
 
 script.on_event(defines.events.on_player_selected_area,
   function(event)
@@ -286,7 +186,7 @@ script.on_event(defines.events.on_player_selected_area,
       -- Filter should only match 'unapproved' ghosts (ghost entities on the selecting player's unapproved ghost force)
       local entities = event.surface.find_entities_filtered {
         area = event.area,
-        force = get_or_create_unapproved_ghost_force(player.force),
+        force = forces.get_or_create_unapproved_force(player.force),
         type = "entity-ghost"
       }
 
@@ -354,20 +254,20 @@ script.on_event(defines.events.on_player_setup_blueprint,
     local adjust_blueprint = function(blueprint)
       local blueprintEntities = blueprint.get_blueprint_entities()
       if blueprintEntities and #blueprintEntities > 0 then
-        local placeholderEntities = filter(blueprintEntities, function(id, blueprintEntity)
+        local placeholderEntities = modutil.filter(blueprintEntities, function(id, blueprintEntity)
           return is_bp_placeholder(blueprintEntity)
         end)
         
         if placeholderEntities and #placeholderEntities > 0 then
-          local force_name = to_unapproved_ghost_force_name(player.force.name)
+          local force_name = forces.get_unapproved_force_name(player.force.name)
           local unapprovedEntities = get_unapproved_ghost_bp_entities(event.surface, force_name, event.area)
 
-          local unapprovedEntitiesByPosition = remap(unapprovedEntities, function(id, blueprintEntity)
-            return position_string(blueprintEntity.position), blueprintEntity
+          local unapprovedEntitiesByPosition = modutil.remap(unapprovedEntities, function(id, blueprintEntity)
+            return modutil.position_string(blueprintEntity.position), blueprintEntity
           end)
 
-          local replacementEntities = remap(placeholderEntities, function(id, placeholderEntity)
-            local replacementEntity = unapprovedEntitiesByPosition[position_string(placeholderEntity.position)]
+          local replacementEntities = modutil.remap(placeholderEntities, function(id, placeholderEntity)
+            local replacementEntity = unapprovedEntitiesByPosition[modutil.position_string(placeholderEntity.position)]
             if replacementEntity then
               replacementEntity.entity_number = placeholderEntity.entity_number
               return id, replacementEntity
@@ -426,7 +326,7 @@ script.on_event(defines.events.on_pre_ghost_deconstructed,
     -- If an unapproved entity was deconstructed (somehow), find and remove the placeholder as well
     if is_placeholder(entity) then
       remove_unapproved_ghost_for(entity)
-    elseif (is_unapproved_ghost_force_name(entity.force.name)) then
+    elseif (forces.is_unapproved_force(entity.force--[[@as LuaForce]])) then
         remove_placeholder_for(entity)
     end
   end
@@ -439,7 +339,7 @@ script.on_event(defines.events.on_player_mined_entity,
     local entity = event.entity
     
     -- If an unapproved entity was mined, find and remove the placeholder as well
-    if (is_unapproved_ghost_force_name(entity.force.name)) then
+    if (forces.is_unapproved_force(entity.force--[[@as LuaForce]])) then
       -- game.print("Unapproved ghost mined: " .. entity_debug_string(entity))
       remove_placeholder_for(entity)
     end
@@ -453,11 +353,11 @@ script.on_event(defines.events.on_pre_build,
     -- before the build happens.  This restores the ghost to the main force so that any special logic like recipe
     -- preservation will be handled properly when the entity gets built.
     local player = game.players[event.player_index]
-    local unapproved_ghost_force_name = to_unapproved_ghost_force_name(player.force.name)
+    local unapproved_ghost_force_name = forces.get_unapproved_force_name(player.force.name)
     if game.forces[unapproved_ghost_force_name] then
       local unapproved_ghosts = player.surface.find_entities_filtered {
         position = event.position,
-        force = to_unapproved_ghost_force_name(player.force.name),
+        force = forces.get_unapproved_force_name(player.force.name),
         name = "entity-ghost"
       }
 
@@ -477,7 +377,7 @@ script.on_event(defines.events.script_raised_revive,
     --       the main player force.  This is to resolve a compatibility issue between this mod and the Creative Mod mod,
     --       as well as potentially other mods too (the mod does have to use the raise_* flag however)
     local entity = event.entity
-    local base_force_name = parse_base_force_name(entity.force.name)
+    local base_force_name = forces.parse_base_force_name(entity.force.name)
     if (entity.force.name ~= base_force_name) then
       remove_placeholder_for(entity)
       entity.force = base_force_name
@@ -524,7 +424,7 @@ local interfaces = {
     game.print("construction-planner: scanning badges for  "..tostring(#ghostEntities).." ghost entities")
     for _, entity in pairs(ghostEntities) do
       local badgeId = approvalBadges.getOrCreate(entity);
-      if is_unapproved_ghost_force_name(entity.force.name) then
+      if forces.is_unapproved_force(entity.force--[[@as LuaForce]]) then
         approvalBadges.showUnapproved(badgeId)
       else
         approvalBadges.showApproved(badgeId)
