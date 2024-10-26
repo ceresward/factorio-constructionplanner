@@ -32,8 +32,18 @@ local function filter(array, fnPredicate)
   end)
 end
 
+local function get_script_blueprint()
+  if not storage.blueprintInventory then
+    local blueprintInventory = game.create_inventory(1)
+    blueprintInventory.insert({ name="blueprint"})
+    storage.blueprintInventory = blueprintInventory
+  end
+  return storage.blueprintInventory[1]
+end
+
 return {
   position_string = position_string,
   remap = remap,
-  filter = filter
+  filter = filter,
+  get_script_blueprint = get_script_blueprint
 }

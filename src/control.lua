@@ -38,80 +38,10 @@
 --  REMOTE INTERFACES (comment out when not debugging!)
 --remote.add_interface("constructionplanner", require('control.remoteInterface'))
 
-local modutil = require("control.modutil")
-local approvalBadges = require("control.approvalBadges")
 local forces = require("control.forces")
+local approval = require("control.approvalByForce")
 
 local SETTING_AUTO_APPROVE = "constructionPlanner-auto-approve"
-
-local function get_script_blueprint()
-  if not storage.blueprintInventory then
-    local blueprintInventory = game.create_inventory(1)
-    blueprintInventory.insert({ name="blueprint"})
-    storage.blueprintInventory = blueprintInventory
-  end
-  return storage.blueprintInventory[1]
-end
-
-local function is_placeholder(entity)
-  return entity.type == "entity-ghost" and entity.ghost_name == "unapproved-ghost-placeholder"
-end
-
-local function is_bp_placeholder(entity)
-  return entity.name == "unapproved-ghost-placeholder"
-end
-
-local function create_placeholder_for(unapproved_entity)
-  -- Note: the placeholder has to be a ghost, otherwise it will overwrite the unapproved entity, and mess up the deconstruction planner interaction
-  local placeholder = unapproved_entity.surface.create_entity {
-    name = "entity-ghost",
-    position = unapproved_entity.position,
-    force = forces.parse_base_force_name(unapproved_entity.force.name),
-    inner_name = "unapproved-ghost-placeholder"
-  }
-  -- game.print("Unapproved entity: " .. entity_debug_string(event.created_entity))
-  -- game.print("Placeholder: " .. entity_debug_string(placeholder))
-  return placeholder
-end
-
-local function remove_placeholder_for(unapproved_entity)
-  -- Note: this search works only because the placeholder will be at the *same exact position* as the unapproved entity
-  local placeholders = unapproved_entity.surface.find_entities_filtered {
-    position = unapproved_entity.position,
-    force = forces.parse_base_force_name(unapproved_entity.force.name),
-    ghost_name = "unapproved-ghost-placeholder"
-  }
-
-  -- Only one placeholder is expected, but if multiple are discovered for whatever reason, just remove them all
-  for _, placeholder in pairs(placeholders) do
-    placeholder.destroy()
-  end
-end
-
-local function get_unapproved_ghost_bp_entities(surface, force, area)
-  local bp = get_script_blueprint()
-  bp.clear_blueprint()
-  bp.create_blueprint {
-    surface = surface,
-    force = force,
-    area = area,
-    always_include_tiles = false
-  }
-  return bp.get_blueprint_entities()
-end
-
-local function remove_unapproved_ghost_for(placeholder)
-  local unapproved_ghosts = placeholder.surface.find_entities_filtered {
-    position = placeholder.position,
-    force = forces.get_unapproved_force_name(placeholder.force.name),
-    name = "entity-ghost"
-  }
-
-  -- Only one placeholder is expected, but if multiple are discovered for whatever reason, just remove them all
-  for _, unapproved_ghost in pairs(unapproved_ghosts) do
-    unapproved_ghost.destroy()
-  end
-end
 
 local function is_auto_approve(player)
   return settings.get_player_settings(player)[SETTING_AUTO_APPROVE].value == true
@@ -121,54 +51,6 @@ local function toggle_auto_approve(player)
   local modSetting = settings.get_player_settings(player)[SETTING_AUTO_APPROVE]
   modSetting.value = not modSetting.value
   settings.get_player_settings(player)[SETTING_AUTO_APPROVE] = modSetting
-end
-
-local function is_approvable_ghost(entity)
-  return entity and entity.type == "entity-ghost" and not is_placeholder(entity)
-end
-
-local function approve_entities(entities)
-  local baseForceCache = {}
-
-  for _, entity in pairs(entities) do
-    if is_approvable_ghost(entity) then
-      local base_force = baseForceCache[entity.force.name]
-      if not base_force then
-        local base_force_name = forces.parse_base_force_name(entity.force.name)
-        base_force = game.forces[base_force_name]
-        baseForceCache[entity.force.name] = base_force
-      end
-      if (entity.force ~= base_force) then
-        remove_placeholder_for(entity)
-        entity.force = base_force
-      end
-      local badgeId = approvalBadges.getOrCreate(entity);
-      approvalBadges.showApproved(badgeId)
-    end
-  end
-end
-
----@param entities LuaEntity[]
-local function unapprove_entities(entities)
-  local unapprovedForceCache = {}
-
-  for _, entity in pairs(entities) do
-    if is_approvable_ghost(entity) then
-      if not forces.is_unapproved_force(entity.force--[[@as LuaForce]]) then
-        local unapproved_force = unapprovedForceCache[entity.force.name]
-        if not unapproved_force then
-          unapproved_force = forces.get_or_create_unapproved_force(entity.force)
-          unapprovedForceCache[entity.force.name] = unapproved_force
-        end
-        if (entity.force ~= unapproved_force) then
-          entity.force = unapproved_force
-          create_placeholder_for(entity)
-        end
-      end
-      local badgeId = approvalBadges.getOrCreate(entity);
-      approvalBadges.showUnapproved(badgeId)
-    end
-  end
 end
 
 
@@ -186,17 +68,10 @@ script.on_event(defines.events.on_player_selected_area,
       local player = game.get_player(event.player_index)
       if player == nil then return end
 
-      -- Filter should only match 'unapproved' ghosts (ghost entities on the selecting player's unapproved ghost force)
-      local entities = event.surface.find_entities_filtered {
-        area = event.area,
-        force = forces.get_or_create_unapproved_force(player.force),
-        type = "entity-ghost"
-      }
-
+      local entities = approval.findUnapprovedGhosts(player, event.surface, event.area)
       if #entities > 0 then
         -- game.print("construction-planner: approving "..tostring(#entities).." entities")
-
-        approve_entities(entities)
+        approval.approveAll(entities)
       end
     end
   end
@@ -209,16 +84,10 @@ script.on_event(defines.events.on_player_alt_selected_area,
         if player == nil then return end
 
         -- Filter should only match 'approved' ghosts (ghost entities on the selecting player's base force)
-        local entities = event.surface.find_entities_filtered {
-          area = event.area,
-          force = player.force,
-          type = "entity-ghost"
-        }
-
+        local entities = approval.findApprovedGhosts(player, event.surface, event.area)
         if #entities > 0 then
           -- game.print("construction-planner: unapproving "..tostring(#entities).." entities")
-
-          unapprove_entities(entities)
+           approval.unapproveAll(entities)
         end
     end
   end
@@ -231,17 +100,17 @@ script.on_event(defines.events.on_built_entity,
     
     local player = game.players[event.player_index]
     if not is_auto_approve(player) then
-      unapprove_entities({event.entity})
+       approval.unapproveAll({event.entity})
     else
-      approve_entities({event.entity})
+      approval.approveAll({event.entity})
     end
 
     -- TODO: ask on the forums if is_shortcut_available can be made available for all mod-defined shortcuts
     --       (but first ask in Discord if there's another way that I'm just missing)
     -- if player.is_shortcut_available("give-construction-planner") and not is_auto_approve(player) then
-    --   unapprove_entities({event.created_entity})
+    --    approval.unapproveAll({event.created_entity})
     -- else
-    --   approve_entities({event.created_entity})
+    --   approval.approveAll({event.created_entity})
     -- end
   end,
   {{ filter="type", type="entity-ghost"}}
@@ -249,89 +118,30 @@ script.on_event(defines.events.on_built_entity,
 
 script.on_event(defines.events.on_player_setup_blueprint,
   function(event)
+    -- Whenever a player creates a new blueprint, the blueprint contents need to be adjusted so the blueprint contains
+    -- only real entities and no placeholder/shadow entities.
     -- Note: this event fires not just for blueprints, but for copy operations as well
     -- game.print("construction-planner: on_player_setup_blueprint, event=" .. serpent.block(event));
 
     local player = game.players[event.player_index]
 
-    local adjust_blueprint = function(blueprint)
-      local blueprintEntities = blueprint.get_blueprint_entities()
-      if blueprintEntities and #blueprintEntities > 0 then
-        local placeholderEntities = modutil.filter(blueprintEntities, function(id, blueprintEntity)
-          return is_bp_placeholder(blueprintEntity)
-        end)
-        
-        if placeholderEntities and #placeholderEntities > 0 then
-          local force_name = forces.get_unapproved_force_name(player.force.name)
-          local unapprovedEntities = get_unapproved_ghost_bp_entities(event.surface, force_name, event.area)
-
-          local unapprovedEntitiesByPosition = modutil.remap(unapprovedEntities, function(id, blueprintEntity)
-            return modutil.position_string(blueprintEntity.position), blueprintEntity
-          end)
-
-          local replacementEntities = modutil.remap(placeholderEntities, function(id, placeholderEntity)
-            local replacementEntity = unapprovedEntitiesByPosition[modutil.position_string(placeholderEntity.position)]
-            if replacementEntity then
-              replacementEntity.entity_number = placeholderEntity.entity_number
-              return id, replacementEntity
-            else
-              return id, nil
-            end
-          end)
-
-          -- Fix up the circuit connections
-          -- game.print("Fixing up circuit connections on " .. tostring(#replacementEntities) .. " replacement entities")
-          for id, replacementEntity in pairs(replacementEntities) do
-            if replacementEntity.connections then
-              for _, connection in pairs(replacementEntity.connections) do
-                for color, connectedEntityRefs in pairs(connection) do
-                  for _, connectedEntityRef in pairs(connectedEntityRefs) do
-                    local replacement_id = unapprovedEntities[connectedEntityRef.entity_id].entity_number
-                    connectedEntityRef.entity_id = replacement_id
-                  end
-                end
-              end
-            end
-          end
-
-          -- Apply the replacement entities
-          for id, replacementEntity in pairs(replacementEntities) do
-            blueprintEntities[id] = replacementEntity
-          end
-
-          -- Uncomment for debugging only
-          -- game.print("Blueprint updated to replace placeholders")
-          -- for id, blueprintEntity in pairs(blueprintEntities) do
-          --   game.print("blueprintEntities[" .. id .. "] = " .. serpent.line(blueprintEntity))
-          -- end
-
-          blueprint.clear_blueprint()
-          blueprint.set_blueprint_entities(blueprintEntities)
-        end
-      end
+    -- Adjust the blueprint_to_setup, if valid (scenario: create new blueprint)
+    if (player.blueprint_to_setup and player.blueprint_to_setup.valid_for_read) then
+      approval.fixCreatedBlueprint(player.blueprint_to_setup, player.force--[[@as LuaForce]], event.surface, event.area)
     end
-    
-    if (player.blueprint_to_setup.valid_for_read) then
-      adjust_blueprint(player.blueprint_to_setup)
-    end
-    if (player.is_cursor_blueprint()) then
-      adjust_blueprint(player.cursor_stack)
+    -- Adjust the cursor blueprint, if valid (scenario: copy operation)
+    if (player.is_cursor_blueprint() and player.cursor_stack and player.cursor_stack.valid_for_read) then
+      approval.fixCreatedBlueprint(player.cursor_stack, player.force--[[@as LuaForce]], event.surface, event.area)
     end
   end
 )
 
+script.on_event(defines.events.on_pre_build, approval.on_pre_build)
+
 script.on_event(defines.events.on_pre_ghost_deconstructed,
   function(event)
     -- game.print("construction-planner: on_pre_ghost_deconstructed for ghost " .. entity_debug_string(event.ghost));
-    local entity = event.ghost
-
-    -- If a placeholder was deconstructed, find and remove the unapproved entity as well
-    -- If an unapproved entity was deconstructed (somehow), find and remove the placeholder as well
-    if is_placeholder(entity) then
-      remove_unapproved_ghost_for(entity)
-    elseif (forces.is_unapproved_force(entity.force--[[@as LuaForce]])) then
-        remove_placeholder_for(entity)
-    end
+    approval.on_pre_entity_removed(event.ghost)
   end
 )
 
@@ -339,37 +149,9 @@ script.on_event(defines.events.on_pre_ghost_deconstructed,
 script.on_event(defines.events.on_player_mined_entity,
   function(event)
     -- game.print("construction-planner: on_player_mined_entity, event=" .. serpent.block(event));
-    local entity = event.entity
-    
-    -- If an unapproved entity was mined, find and remove the placeholder as well
-    if (forces.is_unapproved_force(entity.force--[[@as LuaForce]])) then
-      -- game.print("Unapproved ghost mined: " .. entity_debug_string(entity))
-      remove_placeholder_for(entity)
-    end
+    approval.on_pre_entity_removed(event.entity)
   end,
   {{filter="type", type="entity-ghost"}}
-)
-
-script.on_event(defines.events.on_pre_build,
-  function(event)
-    -- If the player is about to build an entity in the same exact position as an unapproved ghost, approve the ghost
-    -- before the build happens.  This restores the ghost to the main force so that any special logic like recipe
-    -- preservation will be handled properly when the entity gets built.
-    local player = game.players[event.player_index]
-    local unapproved_ghost_force_name = forces.get_unapproved_force_name(player.force.name)
-    if game.forces[unapproved_ghost_force_name] then
-      local unapproved_ghosts = player.surface.find_entities_filtered {
-        position = event.position,
-        force = forces.get_unapproved_force_name(player.force.name),
-        name = "entity-ghost"
-      }
-
-      if #unapproved_ghosts > 0 then
-        -- game.print("Approving " .. #unapproved_ghosts .. " ghosts on pre-build")
-        approve_entities(unapproved_ghosts)
-      end
-    end
-  end
 )
 
 script.on_event(defines.events.script_raised_revive,
@@ -379,12 +161,7 @@ script.on_event(defines.events.script_raised_revive,
     --       placed on the unapproved ghost force by accident, and if so, resolve the issue by reassigning the entity to
     --       the main player force.  This is to resolve a compatibility issue between this mod and the Creative Mod mod,
     --       as well as potentially other mods too (the mod does have to use the raise_* flag however)
-    local entity = event.entity
-    local base_force_name = forces.parse_base_force_name(entity.force.name)
-    if (entity.force.name ~= base_force_name) then
-      remove_placeholder_for(entity)
-      entity.force = base_force_name
-    end
+    approval.on_pre_entity_revived(event.entity)
   end
 )
 
