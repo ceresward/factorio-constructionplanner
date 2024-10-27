@@ -41,9 +41,17 @@ local function get_script_blueprint()
   return storage.blueprintInventory[1]
 end
 
+---Does the provided string end with the provided suffix?
+---@param string string
+---@param suffix string
+local function endsWith(string, suffix)
+  return string.sub(string, -string.len(suffix)) == suffix
+end
+
 return {
   position_string = position_string,
   remap = remap,
   filter = filter,
-  get_script_blueprint = get_script_blueprint
+  get_script_blueprint = get_script_blueprint,
+  endsWith = endsWith
 }

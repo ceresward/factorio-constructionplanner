@@ -1,4 +1,4 @@
-
+local modutil = require('control.modutil')
 local approvalBadges = require('control.approvalBadges')
 local forces = require('control.forces')
 
@@ -22,8 +22,7 @@ end
 local function listUnapprovedPrototypes()
   local unapprovedPrototypeNames = {}
   for name, _ in pairs(prototypes.entity) do
-    local suffix = string.sub(name, -11)
-    if suffix == '-unapproved' then
+    if modutil.endsWith(name, '-unapproved') then
       table.insert(unapprovedPrototypeNames, name)
     end
   end

@@ -39,7 +39,8 @@
 --remote.add_interface("constructionplanner", require('control.remoteInterface'))
 
 local forces = require("control.forces")
-local approval = require("control.approvalByForce")
+-- local approval = require("control.approvalByForce")
+local approval = require("control.approvalByPrototype")
 
 local SETTING_AUTO_APPROVE = "constructionPlanner-auto-approve"
 
