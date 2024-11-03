@@ -1,16 +1,19 @@
 -- Implementation of the approval module that manages approval state using shadow prototypes.
 -- This is the new, experimental way of tracking approval state; approvalByForce is the legacy method
 
+-- TODO: figure out how to do migrations, if necessary
+-- TODO: investigate possibility of swapping item prototype held in cursor to try and avoid weird issues with dragging
+--       power poles and belts
+
 local approvalBadges = require('control.approvalBadges')
 
 -----------------------------------------------------------
 --  Internal implementation
 -----------------------------------------------------------
 
+-- Build name conversion lookup tables
 local unapprovedToApprovedNames = {}
 local approvedToUnapprovedNames = {}
-
--- Build name conversion lookup tables
 for name, _ in pairs(prototypes.entity) do
   local unapprovedName = name..'-unapproved'
   if prototypes.entity[unapprovedName] then
@@ -20,6 +23,9 @@ for name, _ in pairs(prototypes.entity) do
 end
 helpers.write_file('constructionplanner-prototypes.txt', serpent.block(unapprovedToApprovedNames), false)
 helpers.write_file('constructionplanner-prototypes.txt', serpent.block(approvedToUnapprovedNames), true)
+
+-- Build list of crafting-machine entity prototypes to make it easier to lookup later if a given ghost might have recipes
+local craftingMachines = prototypes.get_entity_filtered {{filter="crafting-machine"}}
 
 ---@param entity_proto_name string entity prototype name
 local function isUnapprovedName(entity_proto_name)
@@ -40,6 +46,19 @@ end
 ---@return boolean
 local function isApproved(entity)
   return entity and entity.type == "entity-ghost" and isApprovedName(entity.ghost_name)
+end
+
+---Update approval badge status for the given entity based on its current approval state
+---@param entity any
+local function updateApprovalBadge(entity)
+  local badgeId = approvalBadges.getOrCreate(entity);
+  if isApproved(entity) then
+    approvalBadges.showApproved(badgeId)
+  elseif isUnapproved(entity) then
+    approvalBadges.showUnapproved(badgeId)
+  else
+    approvalBadges.hide(badgeId)
+  end
 end
 
 ---Find all ghost entities for a given player+area+surface
@@ -68,17 +87,29 @@ local function findAllGhostEntitiesAt(player, surface, position)
   }
 end
 
----Use fast-replace to swap out an existing ghost entity with a duplicate entity of a different ghost type
+---Swap out an existing ghost entity with a duplicate entity of a different ghost type
 ---@param entity LuaEntity entity with type 'entity-ghost'
 ---@param ghost_name string name of the entity prototype stored within the ghost
 ---@return LuaEntity? replacement replacement entity
 local function replaceEntityGhostType(entity, ghost_name)
+  -- TODO: figure out how to get these changes to not use the undo queue...or maybe use the queue, but use it
+  --       properly (right now the replacements are removed on undo but the originals don't return)
+  -- TODO: figure out why the unapproved prototypes aren't being considered valid for fast-replace.  Is it because
+  --       they're hidden?  Something else?  If I can fix fast-replace, that would likely also fix the undo queue
+  -- Note though, that not all entities are fast-replaceable... e.g. rails don't support it.  It would probably
+  -- be good to use fast-replace where possible, but keep the create/destroy method as a fallback.  And fix the
+  -- undo/redo for create/destroy method if possible.
+
   if entity.type == 'entity-ghost' then
     game.print('Replacing entity: '..serpent.line(entity.ghost_name))
     if entity.tags then
       game.print('  Tags: '..serpent.line(entity.tags))
     end
     local surface = entity.surface
+    local destroy_entity_params = {
+      player=entity.last_user,
+      item_index=0
+    }
     local create_entity_params = {
       -- General properties
       name='entity-ghost',
@@ -87,14 +118,18 @@ local function replaceEntityGhostType(entity, ghost_name)
       quality=entity.quality,
       force=entity.force,
       player=entity.last_user,
+      item_index=1,
       create_build_effect_smoke=false,
 
       -- 'entity-ghost'-specific properties
       inner_name = ghost_name,
       tags = entity.tags
     }
-    local recipe, quality = entity.get_recipe()
-    entity.destroy()
+    local recipe, quality
+    if craftingMachines[entity.ghost_name] then
+      recipe, quality = entity.get_recipe()
+    end
+    entity.destroy(destroy_entity_params)
     local replacement = surface.create_entity(create_entity_params)
     if replacement then
       game.print('  --> '..serpent.line(replacement.ghost_name))
@@ -151,30 +186,25 @@ end
 
 ---@param entities LuaEntity[]
 local function approveAll(entities)
-  game.print('Approving: '..serpent.line(entities))
+  game.print('Approving'..(entities and #entities)..' entities')
   for _, entity in pairs(entities) do
     if isUnapproved(entity) then
       local replacement = replaceEntityGhostType(entity, unapprovedToApprovedNames[entity.ghost_name])
-      if replacement then
-        local badgeId = approvalBadges.getOrCreate(replacement);
-        approvalBadges.showApproved(badgeId)
-      end
+      entity = replacement or entity
     end
+    updateApprovalBadge(entity)
   end
 end
 
 ---@param entities LuaEntity[]
 local function unapproveAll(entities)
-  game.print('Unapproving: '..serpent.line(entities))
+  game.print('Unapproving'..(entities and #entities)..' entities')
   for _, entity in pairs(entities) do
-    game.print('  '..entity.ghost_name..' --> '..tostring(isApproved(entity)))
     if isApproved(entity) then
       local replacement = replaceEntityGhostType(entity, approvedToUnapprovedNames[entity.ghost_name])
-      if replacement then
-        local badgeId = approvalBadges.getOrCreate(replacement);
-        approvalBadges.showUnapproved(badgeId)
-      end
+      entity = replacement or entity
     end
+    updateApprovalBadge(entity)
   end
 end
 

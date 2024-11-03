@@ -105,14 +105,6 @@ script.on_event(defines.events.on_built_entity,
     else
       approval.approveAll({event.entity})
     end
-
-    -- TODO: ask on the forums if is_shortcut_available can be made available for all mod-defined shortcuts
-    --       (but first ask in Discord if there's another way that I'm just missing)
-    -- if player.is_shortcut_available("give-construction-planner") and not is_auto_approve(player) then
-    --    approval.unapproveAll({event.created_entity})
-    -- else
-    --   approval.approveAll({event.created_entity})
-    -- end
   end,
   {{ filter="type", type="entity-ghost"}}
 )
